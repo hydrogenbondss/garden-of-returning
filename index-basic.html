@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Generative Garden</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            overflow: hidden;
+            background: #1a1a2e;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.9);
+            pointer-events: none;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        #ui h1 {
+            font-size: 1.5rem;
+            font-weight: 300;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+        }
+        #ui .stats {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            line-height: 1.6;
+        }
+        #ui .season {
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin-top: 0.5rem;
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <h1>∞ Generative Garden</h1>
+        <div class="stats">
+            Plants: <span id="plant-count">0</span> &nbsp;|&nbsp;
+            Bees: <span id="bee-count">0</span> &nbsp;|&nbsp;
+            Year: <span id="year-count">1</span>
+        </div>
+        <div class="season" id="season-badge">Spring</div>
+    </div>
+    <canvas id="garden"></canvas>
+
+    <script>
+    const canvas = document.getElementById('garden');
+    const ctx = canvas.getContext('2d');
+
+    // ------------------------------------------------------------------
+    // Utils
+    // ------------------------------------------------------------------
+    const rand = (min, max) => Math.random() * (max - min) + min;
+    const randInt = (min, max) => Math.floor(rand(min, max));
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const hsl = (h, s, l, a = 1) => `hsla(${h % 360},${s}%,${l}%,${a})`;
+    const dist = (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1);
+
+    function noise(x) {
+        return Math.sin(x) * 0.5 + Math.sin(x * 2.3) * 0.25 + Math.sin(x * 5.7) * 0.125;
+    }
+
+    // ------------------------------------------------------------------
+    // Configuration
+    // ------------------------------------------------------------------
+    let width, height, groundY;
+    const MAX_PLANTS = 90;
+    const MAX_BEES = 25;
+    const SEASON_DURATION = 3600; // frames (~60s per season at 60fps)
+
+    const seasons = [
+        { name: 'Spring', skyTop: [160, 60, 80], skyBot: [120, 50, 92], ground: [100, 35, 25], growth: 1.2, beeActive: 0.9, wind: 0.4, flowerChance: 0.03 },
+        { name: 'Summer', skyTop: [200, 70, 60], skyBot: [50, 80, 85],  ground: [110, 40, 22], growth: 1.0, beeActive: 1.0, wind: 0.3, flowerChance: 0.04 },
+        { name: 'Autumn', skyTop: [20, 55, 45],  skyBot: [35, 70, 65], ground: [30, 45, 28],  growth: 0.3, beeActive: 0.5, wind: 0.8, flowerChance: 0.01 },
+        { name: 'Winter', skyTop: [220, 30, 25], skyBot: [200, 20, 85], ground: [200, 15, 18], growth: 0.0, beeActive: 0.0, wind: 0.6, flowerChance: 0.0 }
+    ];
+
+    // ------------------------------------------------------------------
+    // Season Manager
+    // ------------------------------------------------------------------
+    class SeasonManager {
+        constructor() {
+            this.frame = 0;
+            this.index = 0;
+            this.transition = 0; // 0..1 between current and next
+        }
+
+        update() {
+            this.frame++;
+            const total = this.frame % SEASON_DURATION;
+            this.transition = total / SEASON_DURATION;
+            this.index = Math.floor(this.frame / SEASON_DURATION) % seasons.length;
+        }
+
+        get current() { return seasons[this.index]; }
+        get next() { return seasons[(this.index + 1) % seasons.length]; }
+
+        mix(prop, sub) {
+            const a = this.current[prop][sub];
+            const b = this.next[prop][sub];
+            // ease transition
+            const t = this.transition < 0.5
+                ? 2 * this.transition * this.transition
+                : 1 - Math.pow(-2 * this.transition + 2, 2) / 2;
+            return lerp(a, b, t);
+        }
+
+        get growthMultiplier() { return lerp(this.current.growth, this.next.growth, this.transition); }
+        get beeActivity()      { return lerp(this.current.beeActive, this.next.beeActive, this.transition); }
+        get windStrength()     { return lerp(this.current.wind, this.next.wind, this.transition); }
+        get flowerChance()     { return lerp(this.current.flowerChance, this.next.flowerChance, this.transition); }
+    }
+
+    const seasonMgr = new SeasonManager();
+
+    // ------------------------------------------------------------------
+    // DNA
+    // ------------------------------------------------------------------
+    class DNA {
+        constructor(parent = null) {
+            if (parent) {
+                this.hue        = this.mutate(parent.hue, 30);
+                this.sat        = clamp(this.mutate(parent.sat, 15), 20, 90);
+                this.light      = clamp(this.mutate(parent.light, 12), 15, 65);
+                this.flowerHue  = this.mutate(parent.flowerHue, 40);
+                this.branchAngle= clamp(this.mutate(parent.branchAngle, 0.15), 0.2, 1.1);
+                this.segLen     = clamp(this.mutate(parent.segLen, 6), 12, 45);
+                this.thickness  = clamp(this.mutate(parent.thickness, 1), 2, 10);
+                this.maxDepth   = clamp(Math.round(this.mutate(parent.maxDepth, 1)), 3, 7);
+                this.growthRate = clamp(this.mutate(parent.growthRate, 0.3), 0.5, 2.5);
+                this.leafSize   = clamp(this.mutate(parent.leafSize, 3), 4, 18);
+            } else {
+                this.hue        = rand(80, 160); // green family
+                this.sat        = rand(40, 75);
+                this.light      = rand(25, 50);
+                this.flowerHue  = rand(0, 360);
+                this.branchAngle= rand(0.4, 0.8);
+                this.segLen     = rand(18, 32);
+                this.thickness  = rand(3, 7);
+                this.maxDepth   = randInt(4, 7);
+                this.growthRate = rand(0.8, 1.4);
+                this.leafSize   = rand(6, 14);
+            }
+        }
+
+        mutate(val, amount) {
+            return val + rand(-amount, amount);
+        }
+
+        static cross(a, b) {
+            const dna = new DNA(a);
+            dna.hue        = lerp(a.hue, b.hue, 0.5);
+            dna.sat        = lerp(a.sat, b.sat, 0.5);
+            dna.light      = lerp(a.light, b.light, 0.5);
+            dna.flowerHue  = lerp(a.flowerHue, b.flowerHue, 0.5);
+            dna.branchAngle= lerp(a.branchAngle, b.branchAngle, 0.5);
+            dna.segLen     = lerp(a.segLen, b.segLen, 0.5);
+            dna.thickness  = lerp(a.thickness, b.thickness, 0.5);
+            dna.maxDepth   = Math.round(lerp(a.maxDepth, b.maxDepth, 0.5));
+            dna.growthRate = lerp(a.growthRate, b.growthRate, 0.5);
+            dna.leafSize   = lerp(a.leafSize, b.leafSize, 0.5);
+            // slight mutation after cross
+            return new DNA(dna);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Particle (pollen / snow / falling leaves)
+    // ------------------------------------------------------------------
+    class Particle {
+        constructor(x, y, type, hue = 0) {
+            this.x = x;
+            this.y = y;
+            this.type = type; // 'pollen', 'snow', 'leaf'
+            this.vx = rand(-1, 1);
+            this.vy = rand(-0.5, 1.5);
+            this.life = rand(60, 180);
+            this.hue = hue;
+            this.size = rand(1, 3);
+        }
+        update() {
+            this.x += this.vx + noise(this.y * 0.05 + Date.now() * 0.0001) * 0.5;
+            this.y += this.vy;
+            this.life--;
+        }
+        draw(ctx) {
+            if (this.type === 'pollen') {
+                ctx.fillStyle = hsl(this.hue, 80, 70, this.life / 120);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (this.type === 'snow') {
+                ctx.fillStyle = `rgba(255,255,255,${this.life / 150})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (this.type === 'leaf') {
+                ctx.fillStyle = hsl(this.hue, 70, 50, this.life / 150);
+                ctx.beginPath();
+                ctx.ellipse(this.x, this.y, this.size * 2, this.size, this.life * 0.1, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+    const particles = [];
+
+    // ------------------------------------------------------------------
+    // Plant
+    // ------------------------------------------------------------------
+    class Plant {
+        constructor(x, y, dna = null) {
+            this.x = x;
+            this.y = y;
+            this.dna = dna || new DNA();
+            this.age = 0;
+            this.maturity = rand(400, 800);
+            this.dead = false;
+            this.health = 1;
+            this.branches = [];
+            this.flowers = [];
+            this.generateStructure();
+        }
+
+        generateStructure() {
+            // Create a fixed structural skeleton that grows over time
+            this.branches = [];
+            this.flowers = [];
+            const addBranch = (x, y, angle, depth, parentLen) => {
+                const len = this.dna.segLen * rand(0.7, 1.3) * (1 - depth * 0.12);
+                const endX = x + Math.cos(angle) * len;
+                const endY = y + Math.sin(angle) * len;
+                this.branches.push({
+                    x, y, endX, endY, angle, depth,
+                    len, maxLen: len,
+                    grown: 0, thickness: this.dna.thickness * (1 - depth * 0.15),
+                    hasLeaf: depth > 1 && Math.random() > 0.3,
+                    hasFlower: depth > 2 && Math.random() > 0.6,
+                    flowerOpen: 0,
+                    hueOffset: rand(-15, 15)
+                });
+                if (depth < this.dna.maxDepth) {
+                    const count = Math.random() > 0.7 ? 3 : 2;
+                    for (let i = 0; i < count; i++) {
+                        const off = (i - (count - 1) / 2) * this.dna.branchAngle + rand(-0.15, 0.15);
+                        addBranch(endX, endY, angle + off, depth + 1, len);
+                    }
+                }
+            };
+            addBranch(x, y, -Math.PI / 2 + rand(-0.1, 0.1), 0, this.dna.segLen);
+        }
+
+        update() {
+            const gm = seasonMgr.growthMultiplier;
+            if (gm > 0 && this.age < this.maturity) {
+                this.age += this.dna.growthRate * gm;
+            }
+            const growthRatio = Math.min(1, this.age / this.maturity);
+
+            // Wind
+            const time = Date.now() * 0.001;
+            const wind = seasonMgr.windStrength * 0.03;
+
+            // Recompute branch positions based on growth and wind
+            let idx = 0;
+            const grow = (bx, by, angle, depth) => {
+                const b = this.branches[idx];
+                if (!b) return;
+                const localWind = noise(time + this.x * 0.01 + depth) * wind * depth;
+                const effAngle = angle + localWind;
+                const effLen = b.maxLen * Math.pow(growthRatio, 1 + depth * 0.3);
+                b.x = bx; b.y = by;
+                b.angle = effAngle;
+                b.len = effLen;
+                b.grown = effLen / b.maxLen;
+                b.endX = bx + Math.cos(effAngle) * effLen;
+                b.endY = by + Math.sin(effAngle) * effLen;
+                idx++;
+                if (depth < this.dna.maxDepth) {
+                    // Recurse through children based on original tree structure.
+                    // We need to know how many children each branch had.
+                    // Simpler: pre-order traversal using a queue.
+                }
+            };
+            // Rebuild via iterative stack
+            const stack = [{ bx: this.x, by: this.y, angle: -Math.PI / 2 + rand(-0.1, 0.1), depth: 0 }];
+            idx = 0;
+            const childCounts = new Array(this.branches.length).fill(0);
+            // First pass: determine child counts (cached in generation)
+            // Instead, let's just use a second stack for indices.
+            const idxStack = [0];
+            while (stack.length) {
+                const { bx, by, angle, depth } = stack.shift();
+                const i = idxStack.shift();
+                const b = this.branches[i];
+                if (!b) continue;
+                const localWind = noise(time + this.x * 0.005 + depth) * wind * depth;
+                const effAngle = angle + localWind;
+                const effLen = b.maxLen * Math.pow(growthRatio, 1 + depth * 0.25);
+                b.x = bx; b.y = by;
+                b.angle = effAngle;
+                b.len = effLen;
+                b.grown = effLen / b.maxLen;
+                b.endX = bx + Math.cos(effAngle) * effLen;
+                b.endY = by + Math.sin(effAngle) * effLen;
+
+                // Determine children indices on the fly: we know original tree order.
+                // Because generateStructure used pre-order, children were added immediately after parent.
+                // We can count children by looking ahead until depth <= current.
+                // However, pre-order means all descendants are contiguous.
+                // Let's precompute children array once.
+                if (!this.children) this.computeChildren();
+                for (const c of this.children[i]) {
+                    stack.push({ bx: b.endX, by: b.endY, angle: effAngle, depth: depth + 1 });
+                    idxStack.push(c);
+                }
+            }
+
+            // Flower opening
+            for (const b of this.branches) {
+                if (b.hasFlower && b.grown > 0.8) {
+                    if (seasonMgr.current.name === 'Winter') {
+                        b.flowerOpen = Math.max(0, b.flowerOpen - 0.02);
+                    } else {
+                        b.flowerOpen = Math.min(1, b.flowerOpen + 0.01 * gm);
+                    }
+                } else {
+                    b.flowerOpen = Math.max(0, b.flowerOpen - 0.02);
+                }
+            }
+
+            // Seasonal health
+            if (seasonMgr.current.name === 'Winter') this.health -= 0.0002;
+            else if (seasonMgr.current.name === 'Spring') this.health = Math.min(1, this.health + 0.0005);
+
+            if (this.health <= 0) this.dead = true;
+        }
+
+        computeChildren() {
+            this.children = new Array(this.branches.length).fill(0).map(() => []);
+            // Reconstruct from generateStructure logic is tricky.
+            // Instead, we can store children during generation. Let's patch generateStructure.
+        }
+
+        draw(ctx) {
+            const seasonHueShift = seasonMgr.current.name === 'Autumn' ? -50 : (seasonMgr.current.name === 'Winter' ? 180 : 0);
+            const seasonSat = seasonMgr.current.name === 'Winter' ? -40 : (seasonMgr.current.name === 'Autumn' ? 20 : 0);
+            const seasonLight = seasonMgr.current.name === 'Winter' ? 20 : (seasonMgr.current.name === 'Autumn' ? 10 : 0);
+
+            // Draw branches back-to-front for depth
+            for (const b of this.branches) {
+                if (b.len < 1) continue;
+                ctx.lineWidth = Math.max(0.5, b.thickness * b.grown);
+                ctx.lineCap = 'round';
+                const h = this.dna.hue + b.hueOffset + seasonHueShift;
+                const s = clamp(this.dna.sat + seasonSat, 0, 100);
+                const l = clamp(this.dna.light + seasonLight + b.depth * 4, 0, 90);
+                ctx.strokeStyle = hsl(h, s, l);
+                ctx.beginPath();
+                ctx.moveTo(b.x, b.y);
+                ctx.quadraticCurveTo(
+                    (b.x + b.endX) / 2 + noise(b.y * 0.1) * 2,
+                    (b.y + b.endY) / 2,
+                    b.endX, b.endY
+                );
+                ctx.stroke();
+
+                // Leaf
+                if (b.hasLeaf && b.grown > 0.4) {
+                    const leafScale = b.grown * (this.dna.leafSize / 10);
+                    const lh = h + rand(-10, 10);
+                    const fade = seasonMgr.current.name === 'Autumn' || seasonMgr.current.name === 'Winter'
+                        ? Math.max(0, 1 - (seasonMgr.transition > 0.5 ? seasonMgr.transition : 0))
+                        : 1;
+                    if (fade > 0) {
+                        ctx.fillStyle = hsl(lh, s, l + 10, fade);
+                        ctx.save();
+                        ctx.translate(b.endX, b.endY);
+                        ctx.rotate(b.angle + Math.PI / 4);
+                        ctx.scale(leafScale, leafScale);
+                        ctx.beginPath();
+                        ctx.ellipse(0, 0, 6, 2.5, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.restore();
+                    }
+                    // Falling leaves in Autumn
+                    if (seasonMgr.current.name === 'Autumn' && Math.random() < 0.002) {
+                        particles.push(new Particle(b.endX, b.endY, 'leaf', lh));
+                    }
+                }
+
+                // Flower
+                if (b.hasFlower && b.flowerOpen > 0.01) {
+                    const fh = this.dna.flowerHue + b.hueOffset;
+                    const fs = 75 + seasonSat * 0.5;
+                    const fl = 55 + seasonLight * 0.3;
+                    ctx.fillStyle = hsl(fh, fs, fl, b.flowerOpen);
+                    ctx.save();
+                    ctx.translate(b.endX, b.endY);
+                    const petalCount = 5;
+                    const t = Date.now() * 0.001;
+                    for (let p = 0; p < petalCount; p++) {
+                        ctx.save();
+                        ctx.rotate((p / petalCount) * Math.PI * 2 + t * 0.2);
+                        ctx.beginPath();
+                        ctx.ellipse(0, 4 * b.flowerOpen, 2.5 * b.flowerOpen, 5 * b.flowerOpen, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.restore();
+                    }
+                    // center
+                    ctx.fillStyle = hsl(fh + 40, 90, 80, b.flowerOpen);
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 1.5 * b.flowerOpen, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+        }
+    }
+
+    // Patch computeChildren by storing children during generation
+    Plant.prototype.generateStructure = function() {
+        this.branches = [];
+        this.flowers = [];
+        this.children = [];
+        const addBranch = (x, y, angle, depth, parentIdx) => {
+            const idx = this.branches.length;
+            this.children.push([]);
+            if (parentIdx !== -1) this.children[parentIdx].push(idx);
+            const len = this.dna.segLen * rand(0.7, 1.3) * (1 - depth * 0.12);
+            const endX = x + Math.cos(angle) * len;
+            const endY = y + Math.sin(angle) * len;
+            this.branches.push({
+                x, y, endX, endY, angle, depth,
+                len, maxLen: len,
+                grown: 0, thickness: this.dna.thickness * (1 - depth * 0.15),
+                hasLeaf: depth > 1 && Math.random() > 0.3,
+                hasFlower: depth > 2 && Math.random() > 0.6,
+                flowerOpen: 0,
+                hueOffset: rand(-15, 15)
+            });
+            if (depth < this.dna.maxDepth) {
+                const count = Math.random() > 0.75 ? 3 : 2;
+                for (let i = 0; i < count; i++) {
+                    const off = (i - (count - 1) / 2) * this.dna.branchAngle + rand(-0.15, 0.15);
+                    addBranch(endX, endY, angle + off, depth + 1, idx);
+                }
+            }
+        };
+        addBranch(this.x, this.y, -Math.PI / 2 + rand(-0.1, 0.1), 0, -1);
+    };
+
+    const plants = [];
+
+    // ------------------------------------------------------------------
+    // Bee
+    // ------------------------------------------------------------------
+    class Bee {
+        constructor() {
+            this.x = rand(0, width);
+            this.y = rand(groundY - 200, groundY - 50);
+            this.vx = rand(-2, 2);
+            this.vy = rand(-1, 1);
+            this.maxSpeed = rand(2, 4);
+            this.target = null;
+            this.carrying = null; // plant DNA
+            this.idle = 0;
+            this.size = rand(2, 3.5);
+        }
+
+        update() {
+            const activity = seasonMgr.beeActivity;
+            if (activity < 0.05) {
+                // Hibernate off-screen or slow
+                this.x += this.vx * 0.1;
+                this.y += this.vy * 0.1;
+                if (this.y < -20) this.y = -20;
+                return;
+            }
+
+            // Wander
+            this.vx += rand(-0.3, 0.3);
+            this.vy += rand(-0.3, 0.3);
+
+            // Target behavior
+            if (!this.target || Math.random() < 0.01) {
+                this.pickTarget();
+            }
+
+            if (this.target) {
+                const dx = this.target.x - this.x;
+                const dy = this.target.y - this.y;
+                const d = Math.hypot(dx, dy);
+                if (d < 10) {
+                    // Arrived at flower
+                    if (!this.carrying && this.target.flowerOpen > 0.5) {
+                        // Pick up pollen
+                        const plant = this.findPlantForBranch(this.target);
+                        if (plant) this.carrying = plant.dna;
+                        // Sparkle
+                        for (let i = 0; i < 3; i++) {
+                            particles.push(new Particle(this.x, this.y, 'pollen', this.target ? this.target.flowerHue || 60 : 60));
+                        }
+                    } else if (this.carrying) {
+                        // Pollinate / cross
+                        const plant = this.findPlantForBranch(this.target);
+                        if (plant) {
+                            const newDna = DNA.cross(this.carrying, plant.dna);
+                            // Chance to spawn a seed nearby
+                            if (plants.length < MAX_PLANTS && Math.random() < 0.15) {
+                                const sx = clamp(plant.x + rand(-80, 80), 20, width - 20);
+                                const sy = groundY + rand(-3, 3);
+                                const baby = new Plant(sx, sy, newDna);
+                                baby.age = 0;
+                                plants.push(baby);
+                            }
+                        }
+                        this.carrying = null;
+                    }
+                    this.target = null;
+                    this.idle = rand(30, 80);
+                } else {
+                    this.vx += (dx / d) * 0.15;
+                    this.vy += (dy / d) * 0.15;
+                }
+            }
+
+            // Boundaries
+            if (this.x < 0) this.vx += 0.2;
+            if (this.x > width) this.vx -= 0.2;
+            if (this.y < groundY - 300) this.vy += 0.2;
+            if (this.y > groundY - 10) this.vy -= 0.2;
+
+            // Speed limit
+            const speed = Math.hypot(this.vx, this.vy);
+            const limit = this.idle > 0 ? this.maxSpeed * 0.3 : this.maxSpeed * activity;
+            if (speed > limit) {
+                this.vx = (this.vx / speed) * limit;
+                this.vy = (this.vy / speed) * limit;
+            }
+
+            this.x += this.vx;
+            this.y += this.vy;
+            if (this.idle > 0) this.idle--;
+        }
+
+        pickTarget() {
+            const candidates = [];
+            for (const p of plants) {
+                for (const b of p.branches) {
+                    if (b.hasFlower && b.flowerOpen > 0.2) {
+                        const d = dist(this.x, this.y, b.endX, b.endY);
+                        if (d < 250) candidates.push({ branch: b, dist: d });
+                    }
+                }
+            }
+            if (candidates.length) {
+                candidates.sort((a, b) => a.dist - b.dist);
+                this.target = candidates[randInt(0, Math.min(3, candidates.length - 1))].branch;
+            } else {
+                this.target = null;
+            }
+        }
+
+        findPlantForBranch(branch) {
+            for (const p of plants) {
+                if (p.branches.includes(branch)) return p;
+            }
+            return null;
+        }
+
+        draw(ctx) {
+            if (seasonMgr.beeActivity < 0.05) return;
+            ctx.fillStyle = '#f4c430';
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(Math.atan2(this.vy, this.vx));
+            // Body
+            ctx.beginPath();
+            ctx.ellipse(0, 0, this.size * 2, this.size, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Stripes
+            ctx.fillStyle = '#222';
+            ctx.fillRect(-this.size * 0.5, -this.size + 0.5, this.size * 0.6, this.size * 2 - 1);
+            ctx.fillRect(this.size * 0.3, -this.size + 0.5, this.size * 0.5, this.size * 2 - 1);
+            // Wings
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            const wingOffset = Math.sin(Date.now() * 0.03) * 3;
+            ctx.beginPath();
+            ctx.ellipse(0, -this.size - 2 + wingOffset, this.size * 1.2, this.size * 0.6, 0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(0, this.size + 2 - wingOffset, this.size * 1.2, this.size * 0.6, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+    const bees = [];
+
+    // ------------------------------------------------------------------
+    // Ground grass
+    // ------------------------------------------------------------------
+    const grassBlades = [];
+    function initGrass() {
+        grassBlades.length = 0;
+        for (let x = 0; x < width; x += rand(3, 8)) {
+            grassBlades.push({
+                x: x,
+                h: rand(8, 22),
+                lean: rand(-0.2, 0.2),
+                hueOff: rand(-15, 15)
+            });
+        }
+    }
+
+    function drawGround() {
+        const g = ctx.createLinearGradient(0, groundY, 0, height);
+        const h = seasonMgr.mix('ground', 0);
+        const s = seasonMgr.mix('ground', 1);
+        const l = seasonMgr.mix('ground', 2);
+        g.addColorStop(0, hsl(h, s, l));
+        g.addColorStop(1, hsl(h, s, l - 10));
+        ctx.fillStyle = g;
+        ctx.fillRect(0, groundY, width, height - groundY);
+
+        // Grass blades
+        ctx.strokeStyle = hsl(h + 20, s - 10, l + 8);
+        ctx.lineWidth = 1;
+        const time = Date.now() * 0.002;
+        const wind = seasonMgr.windStrength * 0.1;
+        for (const blade of grassBlades) {
+            const w = noise(time + blade.x * 0.01) * wind * blade.h;
+            ctx.strokeStyle = hsl(h + 20 + blade.hueOff, s - 10, l + 8 + blade.hueOff * 0.2);
+            ctx.beginPath();
+            ctx.moveTo(blade.x, groundY);
+            ctx.quadraticCurveTo(blade.x + w + blade.lean * blade.h, groundY - blade.h / 2, blade.x + w * 2 + blade.lean * blade.h * 1.5, groundY - blade.h);
+            ctx.stroke();
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Clouds
+    // ------------------------------------------------------------------
+    const clouds = [];
+    function initClouds() {
+        clouds.length = 0;
+        for (let i = 0; i < 6; i++) {
+            clouds.push({
+                x: rand(0, width),
+                y: rand(20, height * 0.35),
+                scale: rand(0.6, 1.8),
+                speed: rand(0.1, 0.4),
+                puffs: Array.from({ length: 5 }, () => ({ dx: rand(-30, 30), dy: rand(-10, 10), r: rand(20, 40) }))
+            });
+        }
+    }
+    function drawClouds() {
+        const h = seasonMgr.mix('skyTop', 0);
+        const s = seasonMgr.mix('skyTop', 1);
+        const l = seasonMgr.mix('skyTop', 2);
+        ctx.fillStyle = `rgba(255,255,255,${0.15 + seasonMgr.windStrength * 0.05})`;
+        for (const c of clouds) {
+            c.x += c.speed + seasonMgr.windStrength * 0.1;
+            if (c.x > width + 100) c.x = -100;
+            ctx.save();
+            ctx.translate(c.x, c.y);
+            ctx.scale(c.scale, c.scale);
+            ctx.beginPath();
+            for (const p of c.puffs) {
+                ctx.arc(p.dx, p.dy, p.r, 0, Math.PI * 2);
+            }
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Setup & Loop
+    // ------------------------------------------------------------------
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        groundY = height * 0.82;
+        initGrass();
+        initClouds();
+    }
+    window.addEventListener('resize', resize);
+
+    function spawnInitialPlants() {
+        plants.length = 0;
+        const count = Math.min(MAX_PLANTS, Math.floor(width / 18));
+        for (let i = 0; i < count; i++) {
+            const x = rand(20, width - 20);
+            const y = groundY + rand(-2, 4);
+            plants.push(new Plant(x, y));
+            // Randomize ages for visual variety
+            plants[plants.length - 1].age = rand(0, plants[plants.length - 1].maturity);
+        }
+        plants.sort((a, b) => a.y - b.y);
+    }
+
+    function spawnBees() {
+        bees.length = 0;
+        for (let i = 0; i < MAX_BEES; i++) bees.push(new Bee());
+    }
+
+    function drawSky() {
+        const g = ctx.createLinearGradient(0, 0, 0, groundY);
+        g.addColorStop(0, hsl(seasonMgr.mix('skyTop', 0), seasonMgr.mix('skyTop', 1), seasonMgr.mix('skyTop', 2)));
+        g.addColorStop(1, hsl(seasonMgr.mix('skyBot', 0), seasonMgr.mix('skyBot', 1), seasonMgr.mix('skyBot', 2)));
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, width, groundY);
+    }
+
+    function updateUI() {
+        document.getElementById('plant-count').textContent = plants.length;
+        document.getElementById('bee-count').textContent = bees.length;
+        document.getElementById('year-count').textContent = Math.floor(seasonMgr.frame / (SEASON_DURATION * 4)) + 1;
+        const badge = document.getElementById('season-badge');
+        badge.textContent = seasonMgr.current.name;
+        const c = seasonMgr.current;
+        // tint badge slightly with season color
+        badge.style.background = hsl(c.skyTop[0], c.skyTop[1] * 0.6, c.skyTop[2] * 0.8, 0.35);
+    }
+
+    function loop() {
+        seasonMgr.update();
+        ctx.clearRect(0, 0, width, height);
+
+        drawSky();
+        drawClouds();
+
+        // Snow in winter
+        if (seasonMgr.current.name === 'Winter' && Math.random() < 0.3) {
+            particles.push(new Particle(rand(0, width), -5, 'snow'));
+        }
+
+        // Ground
+        drawGround();
+
+        // Plants (sort by Y for pseudo-depth)
+        plants.sort((a, b) => a.y - b.y);
+        for (let i = plants.length - 1; i >= 0; i--) {
+            const p = plants[i];
+            p.update();
+            p.draw(ctx);
+            if (p.dead) plants.splice(i, 1);
+        }
+
+        // Auto-regenerate plants if too few (but not in winter)
+        if (plants.length < MAX_PLANTS * 0.6 && seasonMgr.current.name !== 'Winter' && Math.random() < 0.02) {
+            const x = rand(20, width - 20);
+            const y = groundY + rand(-2, 4);
+            // Try to find a nearby parent
+            let parentDna = null;
+            let best = Infinity;
+            for (const p of plants) {
+                const d = Math.abs(p.x - x);
+                if (d < best) { best = d; parentDna = p.dna; }
+            }
+            const baby = new Plant(x, y, parentDna ? new DNA(parentDna) : null);
+            plants.push(baby);
+        }
+
+        // Bees
+        for (const b of bees) {
+            b.update();
+            b.draw(ctx);
+        }
+
+        // Particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.update();
+            p.draw(ctx);
+            if (p.life <= 0 || p.y > height) particles.splice(i, 1);
+        }
+
+        updateUI();
+        requestAnimationFrame(loop);
+    }
+
+    // Click to plant a seed
+    canvas.addEventListener('pointerdown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        if (y >= groundY - 20 && plants.length < MAX_PLANTS) {
+            let parentDna = null;
+            let best = Infinity;
+            for (const p of plants) {
+                const d = Math.abs(p.x - x);
+                if (d < best) { best = d; parentDna = p.dna; }
+            }
+            const baby = new Plant(x, groundY + rand(-2, 4), parentDna ? new DNA(parentDna) : null);
+            plants.push(baby);
+            // Burst particles
+            for (let i = 0; i < 8; i++) {
+                particles.push(new Particle(x, groundY, 'pollen', baby.dna.flowerHue));
+            }
+        }
+    });
+
+    // Start
+    resize();
+    spawnInitialPlants();
+    spawnBees();
+    loop();
+    </script>
+</body>
+</html>

@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Generative Garden — Living World</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0d14; }
+        canvas { display: block; }
+        #ui {
+            position: absolute;
+            top: 22px; left: 22px;
+            color: rgba(255,255,255,0.92);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            pointer-events: none;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.35);
+            user-select: none;
+        }
+        #ui h1 {
+            font-size: 1.6rem; font-weight: 300; letter-spacing: 0.12em;
+            margin-bottom: 0.4rem;
+        }
+        #ui .row {
+            font-size: 0.9rem; opacity: 0.85; line-height: 1.5;
+            display: flex; gap: 14px; flex-wrap: wrap;
+        }
+        #ui .pill {
+            display: inline-block; padding: 4px 12px; border-radius: 999px;
+            background: rgba(255,255,255,0.12); backdrop-filter: blur(6px);
+            margin-top: 8px; font-weight: 500;
+        }
+        #mute {
+            pointer-events: auto; cursor: pointer; transition: background .2s;
+        }
+        #mute:hover { background: rgba(255,255,255,0.22); }
+        #hint {
+            position: absolute; bottom: 18px; left: 0; right: 0; text-align: center;
+            color: rgba(255,255,255,0.55); font-size: 0.85rem; pointer-events: none;
+            text-shadow: 0 1px 6px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <h1>∞ Generative Garden</h1>
+        <div class="row">
+            <span>Plants <b id="pcount">0</b></span>
+            <span>Bees <b id="bcount">0</b></span>
+            <span>Year <b id="year">1</b></span>
+        </div>
+        <div class="pill" id="season">Spring</div>
+        <div class="pill" id="mute">Sound: off</div>
+    </div>
+    <div id="hint">Click ground to plant • Drag to create wind</div>
+    <canvas id="c"></canvas>
+
+<script>
+/* ================================================================
+   1. Utilities & Noise
+   ================================================================ */
+const rand = (min, max) => Math.random() * (max - min) + min;
+const randInt = (min, max) => Math.floor(rand(min, max));
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const hsl = (h, s, l, a = 1) => `hsla(${h % 360},${clamp(s,0,100)}%,${clamp(l,0,100)}%,${a})`;
+const dist = (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1);
+
+// Simple 2D value noise (smooth, compact)
+const Noise = (() => {
+    const size = 256;
+    const p = new Uint8Array(size * 2);
+    for (let i = 0; i < size; i++) p[i] = i;
+    for (let i = size - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [p[i], p[j]] = [p[j], p[i]];
+    }
+    for (let i = 0; i < size * 2; i++) p[i] = p[i & (size - 1)];
+    function fade(t){ return t * t * t * (t * (t * 6 - 15) + 10); }
+    function lerp(a,b,t){ return a + (b - a) * t; }
+    function grad(hash, x, y) {
+        const h = hash & 15;
+        const u = h < 8 ? x : y;
+        const v = h < 4 ? y : (h === 12 || h === 14) ? x : 0;
+        return ((h & 1) ? -u : u) + ((h & 2) ? -v : v);
+    }
+    return function(x, y) {
+        const X = Math.floor(x) & (size - 1);
+        const Y = Math.floor(y) & (size - 1);
+        x -= Math.floor(x); y -= Math.floor(y);
+        const u = fade(x), v = fade(y);
+        const A = p[X] + Y, B = p[X + 1] + Y;
+        return lerp(v,
+            lerp(u, grad(p[A], x, y), grad(p[B], x - 1, y)),
+            lerp(u, grad(p[A + 1], x, y - 1), grad(p[B + 1], x - 1, y - 1))
+        );
+    };
+})();
+
+/* ================================================================
+   2. Config & Seasons
+   ================================================================ */
+const cfg = {
+    maxPlants: 70,
+    maxBees: 22,
+    seasonFrames: 4200, // ~70s per season
+    gravity: 0.04,
+    windBase: 0.6,
+    audioEnabled: false
+};
+
+const seasons = [
+    { name:'Spring', skyTop:[190,65,55], skyBot:[120,55,88], ground:[105,38,28], sun:[55,95,70], growth:1.3, bee:0.95, wind:0.5, rainChance:0.25 },
+    { name:'Summer', skyTop:[205,75,45], skyBot:[45,85,82],  ground:[115,42,24], sun:[45,98,65], growth:1.05,bee:1.0, wind:0.4, rainChance:0.35 },
+    { name:'Autumn', skyTop:[25,60,38],  skyBot:[38,72,60], ground:[32,48,26], sun:[30,90,55], growth:0.25,bee:0.45, wind:0.9, rainChance:0.15 },
+    { name:'Winter', skyTop:[220,28,22], skyBot:[205,22,82], ground:[210,18,16], sun:[210,40,75],growth:0.0, bee:0.0, wind:0.7, rainChance:0.0 }
+];
+
+class SeasonManager {
+    constructor() { this.frame = 0; }
+    get idx() { return Math.floor(this.frame / cfg.seasonFrames) % seasons.length; }
+    get nextIdx() { return (this.idx + 1) % seasons.length; }
+    get t() {
+        const v = (this.frame % cfg.seasonFrames) / cfg.seasonFrames;
+        return v < 0.5 ? 2 * v * v : 1 - Math.pow(-2 * v + 2, 2) / 2;
+    }
+    get(k, sub = null) {
+        if (sub !== null && Array.isArray(seasons[this.idx][k])) {
+            return lerp(seasons[this.idx][k][sub], seasons[this.nextIdx][k][sub], this.t);
+        }
+        return lerp(seasons[this.idx][k], seasons[this.nextIdx][k], this.t);
+    }
+    update() { this.frame++; }
+}
+const sm = new SeasonManager();
+
+/* ================================================================
+   3. Audio Engine (Procedural Ambience)
+   ================================================================ */
+class AudioEngine {
+    constructor() {
+        this.ctx = null;
+        this.muted = true;
+        this.nodes = {};
+    }
+    init() {
+        if (this.ctx) return;
+        const AC = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AC();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = 0.0001;
+        this.master.connect(this.ctx.destination);
+
+        // Wind drone: filtered brown noise
+        const bufSize = 2 * this.ctx.sampleRate;
+        const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < bufSize; i++) {
+            const w = Math.random() * 2 - 1;
+            data[i] = (i === 0) ? w : (data[i-1] + w * 0.02) / 1.02;
+        }
+        this.nodes.windSrc = this.ctx.createBufferSource();
+        this.nodes.windSrc.buffer = buf;
+        this.nodes.windSrc.loop = true;
+        this.nodes.windGain = this.ctx.createGain();
+        this.nodes.windFilter = this.ctx.createBiquadFilter();
+        this.nodes.windFilter.type = 'lowpass';
+        this.nodes.windFilter.frequency.value = 400;
+        this.nodes.windSrc.connect(this.nodes.windFilter);
+        this.nodes.windFilter.connect(this.nodes.windGain);
+        this.nodes.windGain.connect(this.master);
+        this.nodes.windSrc.start();
+
+        // Rain noise
+        this.nodes.rainSrc = this.ctx.createBufferSource();
+        const rbuf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+        const rdata = rbuf.getChannelData(0);
+        for (let i = 0; i < bufSize; i++) rdata[i] = Math.random() * 2 - 1;
+        this.nodes.rainSrc.buffer = rbuf;
+        this.nodes.rainSrc.loop = true;
+        this.nodes.rainGain = this.ctx.createGain();
+        this.nodes.rainGain.gain.value = 0;
+        this.nodes.rainFilter = this.ctx.createBiquadFilter();
+        this.nodes.rainFilter.type = 'bandpass';
+        this.nodes.rainFilter.frequency.value = 800;
+        this.nodes.rainFilter.Q.value = 0.8;
+        this.nodes.rainSrc.connect(this.nodes.rainFilter);
+        this.nodes.rainFilter.connect(this.nodes.rainGain);
+        this.nodes.rainGain.connect(this.master);
+        this.nodes.rainSrc.start();
+
+        // Insect FM synth
+        this.nodes.insectGain = this.ctx.createGain();
+        this.nodes.insectGain.gain.value = 0;
+        this.nodes.insectGain.connect(this.master);
+        this.insectNext = 0;
+
+        // Bird chirps
+        this.nodes.birdGain = this.ctx.createGain();
+        this.nodes.birdGain.gain.value = 0;
+        this.nodes.birdGain.connect(this.master);
+        this.birdNext = 0;
+    }
+
+    toggle() {
+        if (!this.ctx) this.init();
+        this.muted = !this.muted;
+        const target = this.muted ? 0.0001 : 0.6;
+        const now = this.ctx.currentTime;
+        this.master.gain.setTargetAtTime(target, now, 0.5);
+        document.getElementById('mute').textContent = this.muted ? 'Sound: off' : 'Sound: on';
+        cfg.audioEnabled = !this.muted;
+        if (!this.muted && this.ctx.state === 'suspended') this.ctx.resume();
+    }
+
+    update() {
+        if (!this.ctx || this.muted) return;
+        const now = this.ctx.currentTime;
+        const windStr = sm.get('wind', 'wind') + (mouse.windBoost * 0.5);
+        this.nodes.windGain.gain.setTargetAtTime(clamp(windStr * 0.18, 0, 0.25), now, 0.2);
+        this.nodes.windFilter.frequency.setTargetAtTime(200 + windStr * 900, now, 0.3);
+
+        const isRaining = weather.raining;
+        this.nodes.rainGain.gain.setTargetAtTime(isRaining ? clamp(sm.get('rainChance','rainChance')*0.6,0,0.35) : 0, now, 0.4);
+
+        // Insects (spring/summer dusk/dawn)
+        const season = seasons[sm.idx].name;
+        const dayT = (sm.frame % cfg.seasonFrames) / cfg.seasonFrames;
+        const active = (season === 'Spring' || season === 'Summer') && (dayT < 0.25 || dayT > 0.75);
+        if (active && now > this.insectNext) {
+            this.chirp(now, rand(3000, 6000), 0.015, 'insect');
+            this.insectNext = now + rand(0.2, 1.2);
+        }
+        this.nodes.insectGain.gain.setTargetAtTime(active ? 0.04 : 0, now, 1.0);
+
+        // Birds (morning)
+        const morning = dayT > 0.15 && dayT < 0.4 && season !== 'Winter';
+        if (morning && now > this.birdNext && Math.random() < 0.3) {
+            this.chirp(now, rand(2000, 5000), 0.03, 'bird');
+            this.birdNext = now + rand(1.5, 4.0);
+        }
+    }
+
+    chirp(now, baseFreq, vol, type) {
+        const o = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        o.type = type === 'bird' ? 'sine' : 'triangle';
+        o.frequency.setValueAtTime(baseFreq, now);
+        const dur = type === 'bird' ? rand(0.08, 0.18) : rand(0.04, 0.1);
+        if (type === 'bird') {
+            o.frequency.exponentialRampToValueAtTime(baseFreq * rand(1.3, 2.0), now + dur * 0.5);
+            o.frequency.exponentialRampToValueAtTime(baseFreq * 0.8, now + dur);
+        } else {
+            o.frequency.linearRampToValueAtTime(baseFreq + rand(-400, 400), now + dur);
+        }
+        g.gain.setValueAtTime(0, now);
+        g.gain.linearRampToValueAtTime(vol, now + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+        o.connect(g);
+        g.connect(type === 'bird' ? this.nodes.birdGain : this.nodes.insectGain);
+        o.start(now);
+        o.stop(now + dur + 0.05);
+    }
+}
+const audio = new AudioEngine();
+
+/* ================================================================
+   4. Atmosphere (Sky, Sun, Moon, Stars)
+   ================================================================ */
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, groundY;
+const stars = [];
+for (let i = 0; i < 180; i++) stars.push({ x: rand(0, 1), y: rand(0, 0.6), s: rand(0.5, 2), tw: rand(0, Math.PI * 2) });
+
+function resize() {
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W; canvas.height = H;
+    groundY = H * 0.78;
+}
+window.addEventListener('resize', resize);
+
+function drawSky() {
+    const g = ctx.createLinearGradient(0, 0, 0, groundY);
+    g.addColorStop(0, hsl(sm.get('skyTop',0), sm.get('skyTop',1), sm.get('skyTop',2)));
+    g.addColorStop(1, hsl(sm.get('skyBot',0), sm.get('skyBot',1), sm.get('skyBot',2)));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, groundY);
+}
+
+function drawCelestial() {
+    const dayT = (sm.frame % cfg.seasonFrames) / cfg.seasonFrames;
+    // Sun arc
+    const sunX = W * dayT;
+    const seasonH = sm.get('sun',0);
+    const arcH = 120 + (seasons[sm.idx].name === 'Summer' ? 180 : seasons[sm.idx].name === 'Winter' ? 60 : 120) * Math.sin(dayT * Math.PI);
+    const sunY = groundY - arcH;
+    const sunColor = hsl(seasonH, sm.get('sun',1), sm.get('sun',2));
+
+    // Stars visible when sun low or winter nights
+    const brightness = Math.sin(dayT * Math.PI);
+    let starAlpha = clamp(1 - brightness * 3, 0, 1);
+    if (seasons[sm.idx].name === 'Winter') starAlpha = Math.max(starAlpha, 0.4);
+    if (starAlpha > 0.01) {
+        ctx.fillStyle = `rgba(255,255,255,${starAlpha})`;
+        const t = Date.now() * 0.002;
+        for (const s of stars) {
+            const tw = 0.7 + Math.sin(t + s.tw) * 0.3;
+            ctx.globalAlpha = starAlpha * tw;
+            ctx.beginPath();
+            ctx.arc(s.x * W, s.y * H, s.s * 0.6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    // Sun glow
+    const glow = ctx.createRadialGradient(sunX, sunY, 4, sunX, sunY, 120);
+    glow.addColorStop(0, sunColor);
+    glow.addColorStop(0.4, hsl(seasonH, sm.get('sun',1), sm.get('sun',2), 0.25));
+    glow.addColorStop(1, hsl(seasonH, sm.get('sun',1), sm.get('sun',2), 0));
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 140, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Moon (opposite)
+    const moonX = W * ((dayT + 0.5) % 1);
+    const moonY = groundY - 90 - Math.sin(((dayT + 0.5) % 1) * Math.PI) * 80;
+    const moonBright = clamp(1 - brightness * 1.5, 0, 1);
+    if (moonBright > 0.01) {
+        ctx.fillStyle = `rgba(240,245,255,${moonBright})`;
+        ctx.beginPath();
+        ctx.arc(moonX, moonY, 14, 0, Math.PI * 2);
+        ctx.fill();
+        // moon glow
+        const mg = ctx.createRadialGradient(moonX, moonY, 4, moonX, moonY, 50);
+        mg.addColorStop(0, `rgba(240,245,255,${moonBright * 0.3})`);
+        mg.addColorStop(1, `rgba(240,245,255,0)`);
+        ctx.fillStyle = mg;
+        ctx.beginPath();
+        ctx.arc(moonX, moonY, 60, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Vignette / atmospheric haze
+    const v = ctx.createRadialGradient(W * 0.5, groundY * 0.4, W * 0.2, W * 0.5, groundY * 0.4, W * 0.9);
+    v.addColorStop(0, 'rgba(255,255,255,0)');
+    v.addColorStop(1, `rgba(${seasons[sm.idx].name==='Winter'?'200,210,230':'10,15,30'},0.25)`);
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, W, groundY);
+}
+
+/* ================================================================
+   5. Terrain (Rolling Hills)
+   ================================================================ */
+function terrainHeight(x) {
+    return groundY
+        + Math.sin(x * 0.0018 + 1.2) * 18
+        + Math.sin(x * 0.0053) * 6
+        + Math.sin(x * 0.012) * 2;
+}
+
+function drawTerrain() {
+    const h = sm.get('ground',0);
+    const s = sm.get('ground',1);
+    const l = sm.get('ground',2);
+
+    // Back hill
+    ctx.fillStyle = hsl(h, s - 6, l - 8);
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 8) ctx.lineTo(x, terrainHeight(x) - 18);
+    ctx.lineTo(W, H);
+    ctx.fill();
+
+    // Front ground
+    const g = ctx.createLinearGradient(0, groundY - 20, 0, H);
+    g.addColorStop(0, hsl(h, s, l));
+    g.addColorStop(1, hsl(h, s + 4, l - 10));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 6) ctx.lineTo(x, terrainHeight(x));
+    ctx.lineTo(W, H);
+    ctx.fill();
+}
+
+/* ================================================================
+   6. Wind Field
+   ================================================================ */
+const wind = {
+    time: 0,
+    get(x, y) {
+        const t = this.time;
+        const n = Noise(x * 0.002 + t * 0.3, y * 0.003 + t * 0.15);
+        const gust = Noise(x * 0.008 + t * 1.2, y * 0.008);
+        const strength = sm.get('wind','wind') * 0.6 + mouse.windBoost * 1.2;
+        return (n * 0.7 + gust * 0.3) * strength * (1 + (groundY - y) / 300);
+    },
+    update() { this.time += 0.016; }
+};
+
+
+/* ================================================================
+   7. DNA
+   ================================================================ */
+class DNA {
+    constructor(parent = null) {
+        if (parent) {
+            this.hue = this.mutate(parent.hue, 25);
+            this.sat = clamp(this.mutate(parent.sat, 12), 25, 80);
+            this.light = clamp(this.mutate(parent.light, 10), 20, 55);
+            this.flowerHue = this.mutate(parent.flowerHue, 35);
+            this.branchAngle = clamp(this.mutate(parent.branchAngle, 0.12), 0.28, 0.95);
+            this.segLen = clamp(this.mutate(parent.segLen, 4), 14, 38);
+            this.thickness = clamp(this.mutate(parent.thickness, 0.8), 2.5, 9);
+            this.maxDepth = clamp(Math.round(this.mutate(parent.maxDepth, 1)), 4, 8);
+            this.growthRate = clamp(this.mutate(parent.growthRate, 0.25), 0.6, 2.0);
+            this.leafSize = clamp(this.mutate(parent.leafSize, 2.5), 5, 16);
+            this.flowerSize = clamp(this.mutate(parent.flowerSize, 1.5), 3, 9);
+            this.tropism = clamp(this.mutate(parent.tropism, 0.03), 0.0, 0.18);
+        } else {
+            this.hue = rand(85, 150);
+            this.sat = rand(35, 65);
+            this.light = rand(28, 45);
+            this.flowerHue = rand(0, 360);
+            this.branchAngle = rand(0.42, 0.72);
+            this.segLen = rand(20, 30);
+            this.thickness = rand(4, 7);
+            this.maxDepth = randInt(5, 8);
+            this.growthRate = rand(0.9, 1.3);
+            this.leafSize = rand(7, 13);
+            this.flowerSize = rand(4, 7);
+            this.tropism = rand(0.02, 0.12);
+        }
+    }
+    mutate(v, a) { return v + rand(-a, a); }
+    static cross(a, b) {
+        const mix = (k) => lerp(a[k], b[k], 0.5);
+        const d = new DNA(a);
+        d.hue = mix('hue'); d.sat = mix('sat'); d.light = mix('light');
+        d.flowerHue = mix('flowerHue'); d.branchAngle = mix('branchAngle');
+        d.segLen = mix('segLen'); d.thickness = mix('thickness');
+        d.maxDepth = Math.round(mix('maxDepth'));
+        d.growthRate = mix('growthRate'); d.leafSize = mix('leafSize');
+        d.flowerSize = mix('flowerSize'); d.tropism = mix('tropism');
+        return new DNA(d);
+    }
+}
+
+/* ================================================================
+   8. Leaf
+   ================================================================ */
+class Leaf {
+    constructor(angle, size) {
+        this.baseAngle = angle;
+        this.size = size;
+        this.scale = 0;
+        this.state = 0; // 0=bud, 1=mature, 2=autumn, 3=dead
+        this.stateTimer = 0;
+        this.hueOff = rand(-12, 12);
+        this.dropVx = rand(-1, 1);
+        this.dropVy = rand(0.5, 2);
+        this.dropRot = rand(-0.1, 0.1);
+        this.dropX = 0; this.dropY = 0;
+    }
+    update(growth, season) {
+        if (this.state === 3) {
+            this.dropX += this.dropVx + wind.get(this.dropX, this.dropY) * 8;
+            this.dropY += this.dropVy;
+            return;
+        }
+        const targetScale = growth > 0.35 ? 1 : (growth / 0.35);
+        this.scale += (targetScale - this.scale) * 0.04;
+
+        if (season === 'Autumn' && this.state < 2 && growth > 0.8) {
+            this.stateTimer++;
+            if (this.stateTimer > rand(120, 400)) this.state = 2;
+        } else if (season === 'Winter') {
+            if (Math.random() < 0.015) this.state = 3;
+        } else if (season === 'Spring' && this.state === 2) {
+            if (Math.random() < 0.008) this.state = 1; // rare revival
+        }
+    }
+    getColor(baseHue, baseSat, baseLight, season) {
+        if (this.state === 0) return hsl(baseHue + 10, baseSat - 10, baseLight - 5);
+        if (this.state === 1) return hsl(baseHue + this.hueOff, baseSat, baseLight + 8);
+        if (this.state === 2) {
+            // Autumn gradient from green to orange/red/brown
+            const t = clamp((this.stateTimer - 120) / 300, 0, 1);
+            const h = lerp(baseHue + this.hueOff, rand(15, 45), t);
+            const s = lerp(baseSat, 80, t * 0.5);
+            const l = lerp(baseLight + 8, 45, t);
+            return hsl(h, s, l);
+        }
+        return 'rgba(0,0,0,0)';
+    }
+    draw(ctx, x, y, branchAngle, baseHue, baseSat, baseLight, season, zScale) {
+        if (this.scale < 0.01) return;
+        if (this.state === 3) {
+            ctx.fillStyle = hsl(30, 55, 35, 0.85);
+            ctx.save();
+            ctx.translate(this.dropX, this.dropY);
+            ctx.rotate(branchAngle + this.dropRot * 10);
+            ctx.scale(this.size * zScale * 0.8, this.size * zScale * 0.8);
+            leafPath(ctx);
+            ctx.fill();
+            ctx.restore();
+            return;
+        }
+        const c = this.getColor(baseHue, baseSat, baseLight, season);
+        ctx.fillStyle = c;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(branchAngle + this.baseAngle);
+        const s = this.size * this.scale * zScale;
+        ctx.scale(s, s);
+        leafPath(ctx);
+        ctx.fill();
+        // vein
+        ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+        ctx.lineWidth = 0.3;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -5); ctx.stroke();
+        ctx.restore();
+    }
+}
+function leafPath(ctx) {
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(2, -2, 3, -5, 0, -9);
+    ctx.bezierCurveTo(-3, -5, -2, -2, 0, 0);
+    ctx.closePath();
+}
+
+/* ================================================================
+   9. Flower
+   ================================================================ */
+class Flower {
+    constructor(size, hueOff) {
+        this.size = size;
+        this.hueOff = hueOff;
+        this.bloom = 0; // 0..1
+        this.wilt = 0; // 0..1
+        this.state = 'bud'; // bud, bloom, wilt
+        this.petalCount = randInt(5, 9);
+    }
+    update(growth, season) {
+        const gm = sm.get('growth','growth');
+        if (season === 'Winter') {
+            this.state = 'wilt';
+            this.bloom = Math.max(0, this.bloom - 0.02);
+            this.wilt = Math.min(1, this.wilt + 0.015);
+        } else if (growth > 0.85 && season !== 'Autumn') {
+            if (this.state === 'bud') this.state = 'bloom';
+            if (this.state === 'bloom') {
+                this.bloom = Math.min(1, this.bloom + 0.008 * gm);
+                this.wilt = Math.max(0, this.wilt - 0.01);
+            }
+        } else {
+            if (this.bloom > 0) this.bloom = Math.max(0, this.bloom - 0.01);
+            if (this.bloom <= 0.05) this.state = 'bud';
+        }
+        if (season === 'Autumn' && this.bloom > 0.5) {
+            this.wilt = Math.min(1, this.wilt + 0.008);
+        }
+    }
+    draw(ctx, x, y, branchAngle, hue, zScale) {
+        if (this.bloom < 0.01) {
+            // Bud
+            if (this.state === 'bud') {
+                ctx.fillStyle = hsl(hue + 30, 60, 40);
+                ctx.beginPath();
+                ctx.arc(x, y, this.size * zScale * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            return;
+        }
+        const s = this.size * this.bloom * zScale;
+        const wiltAngle = this.wilt * 0.6;
+        const fh = hue + this.hueOff;
+        // petals back
+        for (let i = 0; i < this.petalCount; i++) {
+            const ang = (i / this.petalCount) * Math.PI * 2 + branchAngle;
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(ang);
+            ctx.rotate(wiltAngle);
+            const px = Math.sin(i * 2.3) * 1.5 * this.wilt;
+            ctx.translate(px, -s * 0.6);
+            ctx.scale(s * 0.5, s * 0.9);
+            ctx.fillStyle = hsl(fh, 80, 65 - this.wilt * 20);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.bezierCurveTo(1, -1, 1, -3, 0, -4);
+            ctx.bezierCurveTo(-1, -3, -1, -1, 0, 0);
+            ctx.fill();
+            ctx.restore();
+        }
+        // center
+        ctx.fillStyle = hsl(fh + 40, 90, 75 - this.wilt * 30);
+        ctx.beginPath();
+        ctx.arc(x, y, s * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+        // stamens
+        ctx.fillStyle = 'rgba(255,240,200,0.9)';
+        for (let i = 0; i < 5; i++) {
+            const a = i * 1.256 + branchAngle;
+            ctx.beginPath();
+            ctx.arc(x + Math.cos(a) * s * 0.15, y + Math.sin(a) * s * 0.15, s * 0.08, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+}
+
+/* ================================================================
+   10. Branch (Hierarchical Physics)
+   ================================================================ */
+class Branch {
+    constructor(parent, depth, baseAngle, maxLen, thickness, dna) {
+        this.parent = parent;
+        this.depth = depth;
+        this.baseAngle = baseAngle;
+        this.angle = baseAngle;
+        this.angularVel = 0;
+        this.maxLen = maxLen;
+        this.thickness = thickness;
+        this.grown = 0;
+        this.endX = 0; this.endY = 0;
+        this.children = [];
+        this.leaf = Math.random() > 0.35 ? new Leaf(rand(-0.6, 0.6), dna.leafSize * rand(0.8, 1.3)) : null;
+        this.flower = (Math.random() > 0.65 && depth > 2) ? new Flower(dna.flowerSize * rand(0.8, 1.2), rand(-20, 20)) : null;
+    }
+    update(growthRatio, x, y, parentGlobalAngle, season) {
+        const myGrowth = Math.pow(growthRatio, 1 + this.depth * 0.22);
+        this.grown = myGrowth;
+        const len = this.maxLen * myGrowth;
+
+        // Wind torque
+        const wx = x + Math.cos(parentGlobalAngle + this.angle) * (len * 0.6);
+        const wy = y + Math.sin(parentGlobalAngle + this.angle) * (len * 0.6);
+        const wf = wind.get(wx, wy);
+        const torqueWind = wf * (1 + this.depth * 0.4) * 0.015;
+        const torqueGravity = -cfg.gravity * this.depth * 0.02;
+        const torqueSpring = (this.baseAngle - this.angle) * (0.06 - this.depth * 0.003);
+
+        this.angularVel += torqueWind + torqueGravity + torqueSpring;
+        this.angularVel *= 0.92; // damping
+        this.angle += this.angularVel;
+
+        const globalAngle = parentGlobalAngle + this.angle;
+        this.endX = x + Math.cos(globalAngle) * len;
+        this.endY = y + Math.sin(globalAngle) * len;
+
+        // Tapered polygon rendering coordinates precomputed here or in draw
+        this.renderX = x; this.renderY = y;
+        this.renderAngle = globalAngle;
+        this.renderLen = len;
+
+        if (this.leaf) this.leaf.update(growthRatio, season);
+        if (this.flower) this.flower.update(growthRatio, season);
+
+        for (const c of this.children) {
+            c.update(growthRatio, this.endX, this.endY, globalAngle, season);
+        }
+    }
+    draw(ctx, seasonHueShift, seasonSat, seasonLight, zScale, baseHue, baseSat, baseLight, season) {
+        if (this.grown < 0.01) return;
+        const len = this.renderLen;
+        const ang = this.renderAngle;
+        const w1 = this.thickness * zScale * this.grown;
+        const w2 = this.thickness * 0.65 * zScale * this.grown;
+        const perp = ang + Math.PI / 2;
+        const x1 = this.renderX + Math.cos(perp) * w1 * 0.5;
+        const y1 = this.renderY + Math.sin(perp) * w1 * 0.5;
+        const x2 = this.renderX + Math.cos(ang) * len;
+        const y2 = this.renderY + Math.sin(ang) * len;
+        const x3 = x2 + Math.cos(perp) * w2 * 0.5;
+        const y3 = y2 + Math.sin(perp) * w2 * 0.5;
+        const x4 = x2 - Math.cos(perp) * w2 * 0.5;
+        const y4 = y2 - Math.sin(perp) * w2 * 0.5;
+        const x0 = this.renderX - Math.cos(perp) * w1 * 0.5;
+        const y0 = this.renderY - Math.sin(perp) * w1 * 0.5;
+
+        const h = baseHue + (this.depth * -3) + seasonHueShift;
+        const s = clamp(baseSat + seasonSat - this.depth * 2, 0, 100);
+        const l = clamp(baseLight + seasonLight + this.depth * 3, 0, 95);
+        ctx.fillStyle = hsl(h, s, l);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.lineTo(x3, y3);
+        ctx.lineTo(x4, y4);
+        ctx.closePath();
+        ctx.fill();
+
+        // Shadow line on bottom half for 3D feel
+        ctx.fillStyle = 'rgba(0,0,0,0.08)';
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.lineTo(x3, y3);
+        ctx.lineTo(x2, y2);
+        ctx.lineTo(x4, y4);
+        ctx.closePath();
+        // Actually just draw a darker quad overlay
+        // Skip for performance, the shape alone is enough
+
+        if (this.leaf) this.leaf.draw(ctx, x2, y2, ang, baseHue, baseSat, baseLight, season, zScale);
+        if (this.flower) this.flower.draw(ctx, x2, y2, ang, baseHue + this.leaf?.hueOff || 0, zScale);
+
+        for (const c of this.children) {
+            c.draw(ctx, seasonHueShift, seasonSat, seasonLight, zScale, baseHue, baseSat, baseLight, season);
+        }
+    }
+}
+
+
+/* ================================================================
+   11. Plant
+   ================================================================ */
+class Plant {
+    constructor(x, z, dna = null) {
+        this.x = x;
+        this.z = z; // 0 = back, 1 = front
+        this.y = terrainHeight(x);
+        this.dna = dna || new DNA();
+        this.age = 0;
+        this.maturity = rand(500, 900);
+        this.dead = false;
+        this.health = 1;
+        this.root = null;
+        this.build();
+    }
+    build() {
+        const add = (parent, depth, angle) => {
+            const len = this.dna.segLen * Math.pow(0.78, depth) * rand(0.85, 1.2);
+            const thick = this.dna.thickness * Math.pow(0.72, depth);
+            const b = new Branch(parent, depth, angle, len, thick, this.dna);
+            if (parent) parent.children.push(b);
+            else this.root = b;
+            if (depth < this.dna.maxDepth) {
+                const count = Math.random() > 0.8 ? 3 : 2;
+                for (let i = 0; i < count; i++) {
+                    const spread = (i - (count - 1) / 2) * this.dna.branchAngle;
+                    // Tropism: branches bend down slightly as they grow
+                    const grav = this.dna.tropism * depth;
+                    add(b, depth + 1, angle + spread + rand(-0.1, 0.1) + grav);
+                }
+            }
+        };
+        add(null, 0, -Math.PI / 2 + rand(-0.08, 0.08));
+    }
+    update(season) {
+        const gm = sm.get('growth','growth');
+        if (gm > 0 && this.age < this.maturity) this.age += this.dna.growthRate * gm;
+        const ratio = Math.min(1, this.age / this.maturity);
+        this.root.update(ratio, this.x, this.y, 0, season);
+
+        // Seasonal health
+        if (season === 'Winter') this.health -= 0.00025;
+        else if (season === 'Spring') this.health = Math.min(1, this.health + 0.0004);
+
+        // Leaves falling in autumn
+        if (season === 'Autumn' || season === 'Winter') {
+            this.visitBranches(b => {
+                if (b.leaf && b.leaf.state === 3 && Math.random() < 0.003) {
+                    // detach visually: leaf already updates its own drop coordinates
+                    // but we can spawn a ground leaf particle if it hits ground
+                }
+            });
+        }
+
+        if (this.health <= 0) this.dead = true;
+    }
+    visitBranches(fn) {
+        const stack = [this.root];
+        while (stack.length) {
+            const b = stack.pop();
+            fn(b);
+            for (const c of b.children) stack.push(c);
+        }
+    }
+    draw(ctx, season) {
+        // Depth scaling and atmospheric perspective
+        const zScale = 0.72 + this.z * 0.28;
+        const fog = 1 - this.z * 0.35; // darken background plants
+        const seasonHueShift = season === 'Autumn' ? -45 : (season === 'Winter' ? 160 : 0);
+        const seasonSat = season === 'Winter' ? -35 : (season === 'Autumn' ? 15 : 0);
+        const seasonLight = season === 'Winter' ? 18 : (season === 'Autumn' ? 8 : 0);
+
+        // Shadow
+        const dayT = (sm.frame % cfg.seasonFrames) / cfg.seasonFrames;
+        const sunAngle = (dayT - 0.5) * 0.6;
+        const shadowLen = (30 + this.dna.maxDepth * 6) * zScale;
+        const sx = this.x + Math.sin(sunAngle) * shadowLen;
+        const sy = this.y + 3;
+        const sw = (14 + this.dna.maxDepth * 4) * zScale;
+        const sh = 4 * zScale;
+        ctx.fillStyle = `rgba(10,15,10,${0.15 * this.z + 0.05})`;
+        ctx.beginPath();
+        ctx.ellipse(sx, sy, sw, sh, sunAngle * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Slight color overlay for atmospheric fog
+        ctx.save();
+        // We can't easily tint everything without extra canvas, so we pass darker colors
+        this.root.draw(ctx, seasonHueShift, seasonSat + (1 - fog) * -20, seasonLight + (1 - fog) * -10, zScale,
+                       this.dna.hue, this.dna.sat, this.dna.light, season);
+        ctx.restore();
+    }
+}
+
+/* ================================================================
+    12. Bee (Enhanced)
+    ================================================================ */
+class Bee {
+    constructor() {
+        this.x = rand(0, W);
+        this.y = rand(terrainHeight(this.x) - 250, terrainHeight(this.x) - 40);
+        this.vx = rand(-2, 2); this.vy = rand(-1, 1);
+        this.maxSpeed = rand(2.5, 4.5);
+        this.target = null;
+        this.carrying = false;
+        this.idle = 0;
+        this.size = rand(2.2, 3.6);
+        this.hoverPhase = rand(0, Math.PI * 2);
+    }
+    update() {
+        const activity = sm.get('bee','bee');
+        if (activity < 0.05) {
+            this.x += this.vx * 0.05; this.y += this.vy * 0.05;
+            if (this.y < -30) this.y = -30;
+            return;
+        }
+        // Figure-8 hover noise
+        this.hoverPhase += 0.15;
+        const hoverX = Math.sin(this.hoverPhase) * 0.4;
+        const hoverY = Math.cos(this.hoverPhase * 2) * 0.2;
+
+        this.vx += rand(-0.25, 0.25) + hoverX;
+        this.vy += rand(-0.25, 0.25) + hoverY;
+
+        if (!this.target || Math.random() < 0.008) this.pickTarget();
+        if (this.target) {
+            const tx = this.target.endX, ty = this.target.endY;
+            const dx = tx - this.x, dy = ty - this.y, d = Math.hypot(dx, dy);
+            if (d < 8) {
+                const plant = this.findPlant(this.target);
+                if (plant) {
+                    if (!this.carrying && this.target.flower && this.target.flower.bloom > 0.5) {
+                        this.carrying = true;
+                        for (let i = 0; i < 4; i++) weather.addParticle(this.x, this.y, 'pollen', plant.dna.flowerHue);
+                    } else if (this.carrying) {
+                        if (plants.length < cfg.maxPlants && Math.random() < 0.12) {
+                            const sx = clamp(plant.x + rand(-90, 90), 30, W - 30);
+                            const sz = clamp(plant.z + rand(-0.2, 0.2), 0, 1);
+                            plants.push(new Plant(sx, sz, DNA.cross(plant.dna, plant.dna))); // slight self-cross for local variation
+                        }
+                        this.carrying = false;
+                    }
+                }
+                this.target = null; this.idle = rand(20, 70);
+            } else {
+                this.vx += (dx / d) * 0.12;
+                this.vy += (dy / d) * 0.12;
+            }
+        }
+
+        // Bounds
+        if (this.x < 0) this.vx += 0.18;
+        if (this.x > W) this.vx -= 0.18;
+        const gy = terrainHeight(this.x);
+        if (this.y < gy - 320) this.vy += 0.18;
+        if (this.y > gy - 15) this.vy -= 0.18;
+
+        const limit = this.idle > 0 ? this.maxSpeed * 0.35 : this.maxSpeed * activity;
+        const sp = Math.hypot(this.vx, this.vy);
+        if (sp > limit) { this.vx = (this.vx / sp) * limit; this.vy = (this.vy / sp) * limit; }
+        this.x += this.vx; this.y += this.vy;
+        if (this.idle > 0) this.idle--;
+    }
+    pickTarget() {
+        const candidates = [];
+        for (const p of plants) {
+            p.visitBranches(b => {
+                if (b.flower && b.flower.bloom > 0.25 && b.flower.state !== 'wilt') {
+                    const d = dist(this.x, this.y, b.endX, b.endY);
+                    if (d < 300) candidates.push({ b, d });
+                }
+            });
+        }
+        if (candidates.length) {
+            candidates.sort((a, b) => a.d - b.d);
+            this.target = candidates[randInt(0, Math.min(3, candidates.length - 1))].b;
+        }
+    }
+    findPlant(branch) {
+        for (const p of plants) {
+            let found = false;
+            p.visitBranches(b => { if (b === branch) found = true; });
+            if (found) return p;
+        }
+        return null;
+    }
+    draw(ctx) {
+        if (sm.get('bee','bee') < 0.05) return;
+        const ang = Math.atan2(this.vy, this.vx);
+        const wingFreq = 0.08;
+        const wingAmp = 5;
+        const wOff = Math.sin(Date.now() * wingFreq) * wingAmp;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(ang);
+        // Body
+        ctx.fillStyle = '#f2c12e';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, this.size * 2.2, this.size, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Stripes
+        ctx.fillStyle = '#1a1a1a';
+        for (let i = -1; i <= 1; i++) {
+            ctx.beginPath();
+            ctx.arc(i * this.size * 0.9, 0, this.size * 0.55, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // Pollen basket
+        if (this.carrying) {
+            ctx.fillStyle = '#d4a017';
+            ctx.beginPath();
+            ctx.ellipse(-this.size, this.size * 0.6, this.size * 0.6, this.size * 0.35, 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(-this.size, -this.size * 0.6, this.size * 0.6, this.size * 0.35, -0.4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // Wings (motion blur via semi-transparent trailing ellipses)
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        for (let k = 0; k < 3; k++) {
+            const t = (Date.now() * wingFreq - k * 0.8) % (Math.PI * 2);
+            const wy = Math.sin(t) * wingAmp * 0.6;
+            const alpha = 0.35 - k * 0.1;
+            ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+            ctx.beginPath();
+            ctx.ellipse(0, -this.size - 2 + wy, this.size * 1.6, this.size * 0.5, 0.25, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(0, this.size + 2 - wy, this.size * 1.6, this.size * 0.5, -0.25, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+}
+
+/* ================================================================
+    13. Weather (Rain / Snow / Pollen)
+    ================================================================ */
+const weather = {
+    particles: [],
+    raining: false,
+    rainAngle: 0,
+    update() {
+        const season = seasons[sm.idx].name;
+        const chance = sm.get('rainChance','rainChance');
+        this.raining = (season !== 'Winter' && season !== 'Autumn') ? (Math.random() < chance * 0.05) : false;
+        if (season === 'Winter' && Math.random() < 0.25) {
+            this.addParticle(rand(0, W), -5, 'snow');
+        }
+        if (this.raining) {
+            const density = Math.floor(chance * 6);
+            this.rainAngle = wind.get(W * 0.5, groundY * 0.5) * 0.5;
+            for (let i = 0; i < density; i++) {
+                this.addParticle(rand(0, W), rand(-10, groundY - 50), 'rain');
+            }
+        }
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const p = this.particles[i];
+            p.x += p.vx + wind.get(p.x, p.y) * (p.type === 'snow' ? 3 : 1);
+            p.y += p.vy;
+            p.life--;
+            if (p.life <= 0 || p.y > H) this.particles.splice(i, 1);
+        }
+    },
+    addParticle(x, y, type, hue = 0) {
+        if (type === 'rain') {
+            this.particles.push({ x, y, vx: this.rainAngle + rand(-0.5, 0.5), vy: rand(12, 18), life: rand(10, 20), type, hue });
+        } else if (type === 'snow') {
+            this.particles.push({ x, y, vx: rand(-1, 1), vy: rand(1, 3), life: rand(120, 300), type, hue });
+        } else if (type === 'pollen') {
+            this.particles.push({ x, y, vx: rand(-1, 1), vy: rand(-0.5, 1.5), life: rand(40, 120), type, hue });
+        }
+    },
+    draw(ctx) {
+        for (const p of this.particles) {
+            if (p.type === 'rain') {
+                ctx.strokeStyle = 'rgba(200,215,235,0.35)';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p.x - p.vx * 1.5, p.y - p.vy * 1.2);
+                ctx.stroke();
+            } else if (p.type === 'snow') {
+                ctx.fillStyle = `rgba(255,255,255,${p.life / 200})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (p.type === 'pollen') {
+                ctx.fillStyle = hsl(p.hue, 85, 70, p.life / 90);
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+};
+
+
+/* ================================================================
+    14. Main Loop & Interaction
+    ================================================================ */
+const plants = [];
+const bees = [];
+const mouse = { x: 0, y: 0, down: false, windBoost: 0 };
+
+function spawnPlants() {
+    plants.length = 0;
+    const count = Math.min(cfg.maxPlants, Math.floor(W / 22));
+    for (let i = 0; i < count; i++) {
+        const z = rand(0, 1);
+        const x = rand(20, W - 20);
+        const p = new Plant(x, z);
+        p.age = rand(0, p.maturity);
+        plants.push(p);
+    }
+    // Depth sort
+    plants.sort((a, b) => a.z - b.z);
+}
+
+function spawnBees() {
+    bees.length = 0;
+    for (let i = 0; i < cfg.maxBees; i++) bees.push(new Bee());
+}
+
+function updateUI() {
+    document.getElementById('pcount').textContent = plants.length;
+    document.getElementById('bcount').textContent = bees.filter(b => sm.get('bee','bee') > 0.05).length;
+    document.getElementById('year').textContent = Math.floor(sm.frame / (cfg.seasonFrames * 4)) + 1;
+    const badge = document.getElementById('season');
+    badge.textContent = seasons[sm.idx].name;
+    badge.style.background = `hsla(${seasons[sm.idx].skyTop[0]},${seasons[sm.idx].skyTop[1]*0.5}%,${seasons[sm.idx].skyTop[2]*0.8}%,0.35)`;
+}
+
+// Mouse / touch wind boost
+canvas.addEventListener('pointerdown', e => {
+    mouse.down = true;
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+    if (!audio.ctx) audio.init();
+});
+window.addEventListener('pointerup', () => { mouse.down = false; });
+window.addEventListener('pointermove', e => {
+    const dx = e.clientX - mouse.x;
+    const dy = e.clientY - mouse.y;
+    mouse.x = e.clientX; mouse.y = e.clientY;
+    if (mouse.down) {
+        mouse.windBoost = clamp(mouse.windBoost + Math.hypot(dx, dy) * 0.002, 0, 1.5);
+    }
+});
+// Plant on click ground
+canvas.addEventListener('pointerup', e => {
+    if (e.clientY > terrainHeight(e.clientX) - 20 && plants.length < cfg.maxPlants) {
+        const z = clamp(rand(0, 1), 0, 1);
+        const baby = new Plant(e.clientX, z);
+        // Inherit from nearest
+        let best = Infinity, parent = null;
+        for (const p of plants) {
+            const d = Math.abs(p.x - e.clientX);
+            if (d < best) { best = d; parent = p; }
+        }
+        if (parent) baby.dna = new DNA(parent.dna);
+        plants.push(baby);
+        plants.sort((a, b) => a.z - b.z);
+        for (let i = 0; i < 10; i++) weather.addParticle(e.clientX, terrainHeight(e.clientX), 'pollen', baby.dna.flowerHue);
+    }
+    mouse.down = false;
+});
+
+document.getElementById('mute').addEventListener('click', () => audio.toggle());
+
+function loop() {
+    sm.update();
+    wind.update();
+    audio.update();
+    weather.update();
+
+    ctx.clearRect(0, 0, W, H);
+    drawSky();
+    drawCelestial();
+    drawTerrain();
+
+    const season = seasons[sm.idx].name;
+
+    // Auto-regenerate if sparse (not winter)
+    if (plants.length < cfg.maxPlants * 0.55 && season !== 'Winter' && Math.random() < 0.015) {
+        const x = rand(30, W - 30);
+        const z = rand(0, 1);
+        let parent = null, best = Infinity;
+        for (const p of plants) {
+            const d = Math.abs(p.x - x);
+            if (d < best) { best = d; parent = p; }
+        }
+        const baby = new Plant(x, z, parent ? new DNA(parent.dna) : null);
+        plants.push(baby);
+        plants.sort((a, b) => a.z - b.z);
+    }
+
+    // Draw plants back-to-front
+    for (let i = 0; i < plants.length; i++) {
+        const p = plants[i];
+        p.update(season);
+        p.draw(ctx, season);
+    }
+    // Remove dead
+    for (let i = plants.length - 1; i >= 0; i--) {
+        if (plants[i].dead) plants.splice(i, 1);
+    }
+
+    // Weather behind bees
+    weather.draw(ctx);
+
+    // Bees
+    for (const b of bees) {
+        b.update();
+        b.draw(ctx);
+    }
+
+    // Mouse wind boost decay
+    mouse.windBoost *= 0.96;
+
+    updateUI();
+    requestAnimationFrame(loop);
+}
+
+resize();
+spawnPlants();
+spawnBees();
+loop();
+</script>
+</body>
+</html>
