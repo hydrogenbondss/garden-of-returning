@@ -3,1037 +3,320 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Garden of Returning — A Living Sanctuary</title>
+<title>Garden of Returning — Jeffrey Nicholas Tse</title>
+<meta name="description" content="A living browser sanctuary where plants grow, bloom, die, and return. Procedural audio, generative poetry, and seasonal cycles.">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #080a10; }
-  canvas { display: block; }
+  @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Space+Mono:ital@0;1&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#080a10; }
+  canvas { display:block; }
+
+  /* ENTRY SCREEN */
+  #entry {
+    position:fixed; inset:0; z-index:200;
+    background:#080a10;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transition:opacity 1.8s ease; cursor:pointer;
+  }
+  #entry.fade { opacity:0; pointer-events:none; }
+  #entry-title {
+    font-family:'IM Fell English',serif; font-size:clamp(1.8rem,4vw,3rem);
+    color:rgba(230,220,190,0.88); letter-spacing:.08em; margin-bottom:.75rem;
+    text-align:center; font-weight:400;
+  }
+  #entry-subtitle {
+    font-family:'Space Mono',monospace; font-size:.7rem;
+    color:rgba(154,168,130,0.5); letter-spacing:.22em; text-transform:uppercase;
+    margin-bottom:3rem; text-align:center;
+  }
+  #entry-btn {
+    font-family:'Space Mono',monospace; font-size:.65rem;
+    color:rgba(200,190,155,0.55); letter-spacing:.28em; text-transform:uppercase;
+    border:1px solid rgba(200,190,155,0.2); padding:14px 36px;
+    background:transparent; cursor:pointer; transition:all .4s;
+  }
+  #entry-btn:hover { color:rgba(230,220,190,0.9); border-color:rgba(230,220,190,0.45); background:rgba(230,220,190,0.04); }
+  #entry-note {
+    position:absolute; bottom:2rem; left:0; right:0; text-align:center;
+    font-family:'Space Mono',monospace; font-size:.6rem;
+    color:rgba(154,168,130,0.3); letter-spacing:.15em; text-transform:uppercase;
+  }
+
+  /* UI OVERLAY */
   #ui {
-    position: absolute; top: 22px; left: 22px;
-    color: rgba(255,255,255,0.9); pointer-events: none;
-    font-family: 'Georgia', 'Noto Serif JP', serif; line-height: 1.5;
-    text-shadow: 0 2px 12px rgba(0,0,0,0.45); user-select: none;
+    position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none;
+    display:flex; flex-direction:column; justify-content:space-between; padding:2rem;
+    opacity:0; transition:opacity 1s ease 1s;
   }
-  #ui h1 { font-size: 1.4rem; font-weight: 400; letter-spacing: 0.15em; opacity: 0.95; }
-  #haiku { font-size: 1.05rem; font-style: italic; opacity: 0.85; margin-top: 6px; max-width: 420px; }
-  #stats { font-size: 0.8rem; opacity: 0.7; margin-top: 10px; display: flex; gap: 14px; }
-  #season { display: inline-block; padding: 3px 12px; border-radius: 999px; background: rgba(255,255,255,0.12); backdrop-filter: blur(6px); margin-top: 8px; font-size: 0.82rem; }
-  #mute { pointer-events: auto; cursor: pointer; transition: background .2s; }
-  #mute:hover { background: rgba(255,255,255,0.22); }
+  #ui.visible { opacity:1; }
+
+  #ui-top { display:flex; justify-content:space-between; align-items:flex-start; }
+  #ui-title { font-family:'IM Fell English',serif; font-size:1.1rem; color:rgba(230,220,190,0.7); letter-spacing:.06em; }
+  #ui-season-wrap { text-align:right; }
+  #season-name { font-family:'Space Mono',monospace; font-size:.65rem; color:rgba(154,168,130,0.6); letter-spacing:.2em; text-transform:uppercase; }
+  #year-count { font-family:'Space Mono',monospace; font-size:.55rem; color:rgba(154,168,130,0.35); letter-spacing:.15em; margin-top:.25rem; }
+
+  #ui-bottom { display:flex; justify-content:space-between; align-items:flex-end; }
+  #haiku {
+    font-family:'IM Fell English',serif; font-style:italic;
+    font-size:clamp(.85rem,1.4vw,1.05rem); color:rgba(220,210,175,0.7);
+    line-height:1.8; max-width:340px;
+  }
+  #ui-stats {
+    text-align:right; font-family:'Space Mono',monospace; font-size:.58rem;
+    color:rgba(154,168,130,0.35); letter-spacing:.12em; line-height:2;
+  }
+
+  /* SOUND TOGGLE */
+  #sound-btn {
+    position:fixed; top:2rem; right:2rem; z-index:100; pointer-events:auto;
+    font-family:'Space Mono',monospace; font-size:.58rem; letter-spacing:.18em;
+    text-transform:uppercase; color:rgba(154,168,130,0.4);
+    background:transparent; border:none; cursor:pointer; transition:color .3s;
+    display:none;
+  }
+  #sound-btn.show { display:block; }
+  #sound-btn:hover { color:rgba(154,168,130,0.8); }
+
+  /* TOOLTIP */
   #tooltip {
-    position: absolute; pointer-events: none; padding: 10px 14px; border-radius: 8px;
-    background: rgba(10,12,16,0.72); backdrop-filter: blur(8px); color: rgba(255,255,255,0.92);
-    font-family: 'Georgia', serif; font-size: 0.9rem; opacity: 0; transition: opacity 0.2s;
-    border: 1px solid rgba(255,255,255,0.08); max-width: 220px; line-height: 1.4;
+    position:absolute; pointer-events:none;
+    font-family:'IM Fell English',serif; font-style:italic;
+    font-size:.85rem; color:rgba(220,210,175,0.85);
+    background:rgba(8,10,16,0.75); backdrop-filter:blur(8px);
+    border:1px solid rgba(200,190,155,0.1); border-radius:4px;
+    padding:10px 14px; opacity:0; transition:opacity .2s;
+    line-height:1.5; max-width:200px;
   }
-  #tooltip .name { font-size: 1.05rem; color: #e8dcc0; margin-bottom: 4px; }
-  #tooltip .meta { font-size: 0.75rem; opacity: 0.7; }
-  #hint { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center; color: rgba(255,255,255,0.4); font-size: 0.8rem; pointer-events: none; }
+  #tooltip .t-name { font-size:.95rem; color:rgba(230,220,190,0.95); margin-bottom:4px; font-style:normal; }
+  #tooltip .t-meta { font-size:.75rem; color:rgba(154,168,130,0.7); font-family:'Space Mono',monospace; letter-spacing:.05em; }
+
+  /* HINT */
+  #hint {
+    position:fixed; bottom:2rem; left:50%; transform:translateX(-50%);
+    font-family:'Space Mono',monospace; font-size:.58rem; letter-spacing:.18em;
+    text-transform:uppercase; color:rgba(154,168,130,0.25);
+    pointer-events:none; z-index:50; text-align:center;
+    transition:opacity 2s ease; white-space:nowrap;
+  }
+  #hint.fade-out { opacity:0; }
+
+  /* ABOUT PANEL */
+  #about-panel {
+    position:fixed; bottom:2rem; left:2rem; z-index:100;
+    max-width:280px; pointer-events:none;
+    opacity:0; transition:opacity .4s;
+  }
+  #about-panel.show { opacity:1; pointer-events:auto; }
+  #about-text {
+    font-family:'IM Fell English',serif; font-size:.82rem;
+    color:rgba(154,168,130,0.5); line-height:1.7; letter-spacing:.02em;
+  }
 </style>
 </head>
 <body>
-<div id="ui">
-  <h1>Garden of Returning</h1>
-  <div id="haiku">Loading...</div>
-  <div id="stats">
-    <span>Living <b id="pcount">0</b></span>
-    <span>Remembered <b id="mcount">0</b></span>
-    <span>Year <b id="year">1</b></span>
-  </div>
-  <div id="season">Spring</div>
-  <div class="pill" id="mute">Sound: off</div>
+
+<!-- ENTRY -->
+<div id="entry">
+  <div id="entry-title">Garden of Returning</div>
+  <div id="entry-subtitle">A living sanctuary</div>
+  <button id="entry-btn">Enter &middot; Begin</button>
+  <div id="entry-note">Sound optional &nbsp;&middot;&nbsp; Click ground to plant &nbsp;&middot;&nbsp; Hover to tend</div>
 </div>
-<div id="tooltip"></div>
-<div id="hint">Hold near plants to tend • Click ground to plant • Drag to summon wind</div>
+
+<!-- MAIN CANVAS -->
 <canvas id="c"></canvas>
 
+<!-- UI -->
+<div id="ui">
+  <div id="ui-top">
+    <div>
+      <div id="ui-title">Garden of Returning</div>
+    </div>
+    <div id="ui-season-wrap">
+      <div id="season-name">Spring</div>
+      <div id="year-count">Year 1</div>
+    </div>
+  </div>
+  <div id="ui-bottom">
+    <div id="haiku">—</div>
+    <div id="ui-stats">
+      <div><span id="pcount">0</span> living</div>
+      <div><span id="mcount">0</span> remembered</div>
+    </div>
+  </div>
+</div>
+
+<button id="sound-btn">Sound: off</button>
+<div id="tooltip"><div class="t-name"></div><div class="t-meta"></div></div>
+<div id="hint">Hover to tend &nbsp;&middot;&nbsp; Click ground to plant &nbsp;&middot;&nbsp; Drag to summon wind</div>
+
 <script>
-/* ---------------------------------------------------------------
-   Utilities & Noise
-   --------------------------------------------------------------- */
-const rand = (min, max) => Math.random() * (max - min) + min;
-const randInt = (min, max) => Math.floor(rand(min, max));
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-const lerp = (a, b, t) => a + (b - a) * t;
-const hsl = (h, s, l, a = 1) => `hsla(${h % 360},${clamp(s,0,100)}%,${clamp(l,0,100)}%,${a})`;
-const dist = (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1);
+const rand=(a,b)=>Math.random()*(b-a)+a,randInt=(a,b)=>Math.floor(rand(a,b)),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),lerp=(a,b,t)=>a+(b-a)*t,hsl=(h,s,l,a=1)=>`hsla(${h%360},${clamp(s,0,100)}%,${clamp(l,0,100)}%,${a})`,dist=(x1,y1,x2,y2)=>Math.hypot(x2-x1,y2-y1);
 
-const Noise = (() => {
-  const size = 256, p = new Uint8Array(size * 2);
-  for (let i = 0; i < size; i++) p[i] = i;
-  for (let i = size - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [p[i], p[j]] = [p[j], p[i]];
-  }
-  for (let i = 0; i < size * 2; i++) p[i] = p[i & (size - 1)];
-  function fade(t){ return t*t*t*(t*(t*6-15)+10); }
-  function grad(hash,x,y){
-    const h = hash & 15, u = h < 8 ? x : y, v = h < 4 ? y : (h===12||h===14)?x:0;
-    return ((h&1)?-u:u)+((h&2)?-v:v);
-  }
-  return function(x, y) {
-    const X = Math.floor(x) & (size - 1), Y = Math.floor(y) & (size - 1);
-    x -= Math.floor(x); y -= Math.floor(y);
-    const u = fade(x), v = fade(y);
-    const A = p[X] + Y, B = p[X + 1] + Y;
-    return lerp(v, lerp(u, grad(p[A], x, y), grad(p[B], x - 1, y)), lerp(u, grad(p[A + 1], x, y - 1), grad(p[B + 1], x - 1, y - 1)));
-  };
-})();
+const Noise=(()=>{const n=256,p=new Uint8Array(n*2);for(let i=0;i<n;i++)p[i]=i;for(let i=n-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[p[i],p[j]]=[p[j],p[i]]}for(let i=0;i<n*2;i++)p[i]=p[i&(n-1)];function fade(t){return t*t*t*(t*(t*6-15)+10)}function grad(h,x,y){const hh=h&15,u=hh<8?x:y,v=hh<4?y:(hh===12||hh===14)?x:0;return((hh&1)?-u:u)+((hh&2)?-v:v)}return function(x,y){const X=Math.floor(x)&(n-1),Y=Math.floor(y)&(n-1);x-=Math.floor(x);y-=Math.floor(y);const u=fade(x),v=fade(y),A=p[X]+Y,B=p[X+1]+Y;return lerp(v,lerp(u,grad(p[A],x,y),grad(p[B],x-1,y)),lerp(u,grad(p[A+1],x,y-1),grad(p[B+1],x-1,y-1)))}})();
 
-/* ---------------------------------------------------------------
-   Config & Seasons
-   --------------------------------------------------------------- */
-const cfg = {
-  maxPlants: 65, maxBees: 18, maxFireflies: 35, maxMemories: 50,
-  seasonFrames: 4800, gravity: 0.04, audioEnabled: false
-};
-const seasons = [
-  { name:'Spring', skyTop:[195,68,52], skyBot:[125,58,86], ground:[108,40,26], sun:[50,92,68], growth:1.25, bee:0.95, wind:0.45, rainChance:0.22 },
-  { name:'Summer', skyTop:[208,72,42], skyBot:[48,82,78],  ground:[118,44,22], sun:[42,95,62], growth:1.0,  bee:1.0, wind:0.35, rainChance:0.32 },
-  { name:'Autumn', skyTop:[28,58,34],  skyBot:[42,68,56], ground:[35,46,24], sun:[28,88,52], growth:0.2,  bee:0.4, wind:0.85, rainChance:0.12 },
-  { name:'Winter', skyTop:[222,26,20], skyBot:[208,20,78], ground:[212,16,14], sun:[208,35,72], growth:0.0,  bee:0.0, wind:0.65, rainChance:0.0  }
+const cfg={maxPlants:65,maxBees:18,maxFireflies:35,maxMemories:50,seasonFrames:4800,gravity:0.04,audioEnabled:false};
+const seasons=[
+  {name:'Spring',skyTop:[195,68,52],skyBot:[125,58,86],ground:[108,40,26],sun:[50,92,68],growth:1.25,bee:0.95,wind:0.45,rainChance:0.22},
+  {name:'Summer',skyTop:[208,72,42],skyBot:[48,82,78],ground:[118,44,22],sun:[42,95,62],growth:1.0,bee:1.0,wind:0.35,rainChance:0.32},
+  {name:'Autumn',skyTop:[28,58,34],skyBot:[42,68,56],ground:[35,46,24],sun:[28,88,52],growth:0.2,bee:0.4,wind:0.85,rainChance:0.12},
+  {name:'Winter',skyTop:[222,26,20],skyBot:[208,20,78],ground:[212,16,14],sun:[208,35,72],growth:0.0,bee:0.0,wind:0.65,rainChance:0.0}
 ];
 
-class SeasonManager {
-  constructor(){ this.frame = 0; }
-  get idx(){ return Math.floor(this.frame / cfg.seasonFrames) % seasons.length; }
-  get nextIdx(){ return (this.idx + 1) % seasons.length; }
-  get t(){
-    const v = (this.frame % cfg.seasonFrames) / cfg.seasonFrames;
-    return v < 0.5 ? 2*v*v : 1 - Math.pow(-2*v+2,2)/2;
-  }
-  get(k, sub=null){
-    if (sub !== null && Array.isArray(seasons[this.idx][k])) {
-      return lerp(seasons[this.idx][k][sub], seasons[this.nextIdx][k][sub], this.t);
-    }
-    return lerp(seasons[this.idx][k], seasons[this.nextIdx][k], this.t);
-  }
-  update(){ this.frame++; }
-}
-const sm = new SeasonManager();
+class SeasonManager{constructor(){this.frame=0}get idx(){return Math.floor(this.frame/cfg.seasonFrames)%seasons.length}get nextIdx(){return(this.idx+1)%seasons.length}get t(){const v=(this.frame%cfg.seasonFrames)/cfg.seasonFrames;return v<.5?2*v*v:1-Math.pow(-2*v+2,2)/2}get(k,sub=null){if(sub!==null&&Array.isArray(seasons[this.idx][k]))return lerp(seasons[this.idx][k][sub],seasons[this.nextIdx][k][sub],this.t);return lerp(seasons[this.idx][k],seasons[this.nextIdx][k],this.t)}update(){this.frame++}}
+const sm=new SeasonManager();
 
-/* ---------------------------------------------------------------
-   Names & Poetry
-   --------------------------------------------------------------- */
-const syllables = ['a','i','u','e','o','ka','ki','ku','ke','ko','sa','shi','su','se','so','ta','chi','tsu','te','to','na','ni','nu','ne','no','ha','hi','fu','he','ho','ma','mi','mu','me','mo','ya','yu','yo','ra','ri','ru','re','ro','wa','n'];
-const nameSuffixes = ['kaze','hana','tsuki','yama','mizu','hi','ki','ame','yuki','sora','tori','suna','ishi','kusa','mori','tsuyu','akane','sakura','kaede','fuyu','natsu','aki','haru'];
+const syllables=['a','i','u','e','o','ka','ki','ku','ke','ko','sa','shi','su','se','so','ta','chi','tsu','te','to','na','ni','nu','ne','no','ha','hi','fu','he','ho','ma','mi','mu','me','mo','ya','yu','yo','ra','ri','ru','re','ro','wa','n'];
+const nameSuffixes=['kaze','hana','tsuki','yama','mizu','hi','ki','ame','yuki','sora','tori','suna','ishi','kusa','mori','tsuyu','akane','sakura','kaede','fuyu','natsu','aki','haru'];
+function generateName(){if(Math.random()<.35){const pre=syllables[randInt(0,syllables.length)],suf=nameSuffixes[randInt(0,nameSuffixes.length)];return(pre[0].toUpperCase()+pre.slice(1))+suf}const parts=[];for(let i=0;i<randInt(2,4);i++)parts.push(syllables[randInt(0,syllables.length)]);let n=parts.join('');return n[0].toUpperCase()+n.slice(1)}
 
-function generateName() {
-  if (Math.random() < 0.35) {
-    const pre = syllables[randInt(0, syllables.length)];
-    const suf = nameSuffixes[randInt(0, nameSuffixes.length)];
-    return (pre[0].toUpperCase() + pre.slice(1)) + suf;
-  }
-  const parts = [];
-  const len = randInt(2, 4);
-  for (let i = 0; i < len; i++) parts.push(syllables[randInt(0, syllables.length)]);
-  let n = parts.join('');
-  return n[0].toUpperCase() + n.slice(1);
-}
+function generateHaiku(living,memories,bees,season,dayT){const lines={Spring:[['Morning dew glistens','Soft rain on new leaves','Green fingers reach up','A breath of warm air','Buds hold their secrets'],['Petals slowly open','The garden remembers','Roots drink the meltwater','Bees hum their first songs','Seeds dream in the dark'],['Life returns again','Nothing is truly lost','Hope grows from the stones','Time is a circle','Silence learns to bloom']],Summer:[['Golden light lingers','Heat shimmers above','Leaves drink the long day','The sun does not hurry','Heavy air holds scent'],['Bees borrow the sunset','Fireflies wake at dusk','Shadows grow thin and soft','Roots whisper at midnight','Flowers face the sky'],['Day and night embrace','Abundance without end','The earth breathes out warmth','Even stones are sleeping','Growth has no master']],Autumn:[['Crimson leaves let go','The wind takes its tithe','Branches bare their scars','Smoke colors the distance','Fruit falls to the soil'],['Stones remember green','Bees seek the last bloom','A hush through the garden','Colors burn then fade','Roots prepare for rest'],['Beauty is surrender','Letting go is love','What falls becomes seed','The old makes way','Autumn holds no grief']],Winter:[['Snow covers the stones','White breath, white sky, white bone','The garden holds its ghosts','Ice on sleeping branches','A single crow calls'],['Silent roots dream on','Dead names wear moss and frost','Stars watch over all','Nothing moves but wind','Memory is warmth'],['Spring waits beneath snow','Death is just a season','Stillness is a gift','What sleeps will awaken','The circle holds true']]}[season];let set=randInt(0,5);if(memories>living&&season!=='Winter')set=2;if(bees>5&&season==='Summer'&&dayT>.6)set=1;if(living===0)set=4;return`${lines[0][set]}<br>${lines[1][set]}<br>${lines[2][set]}`}
 
-function generateHaiku(living, memories, bees, season, dayT) {
-  const lines = {
-    Spring: [
-      ['Morning dew glistens','Soft rain on new leaves','Green fingers reach up','A breath of warm air','Buds hold their secrets'],
-      ['Petals slowly open','The garden remembers','Roots drink the meltwater','Bees hum their first songs','Seeds dream in the dark'],
-      ['Life returns again','Nothing is truly lost','Hope grows from the stones','Time is a circle','Silence learns to bloom']
-    ],
-    Summer: [
-      ['Golden light lingers','Heat shimmers above','Leaves drink the long day','The sun does not hurry','Heavy air holds scent'],
-      ['Bees borrow the sunset','Fireflies wake at dusk','Shadows grow thin and soft','Roots whisper at midnight','Flowers face the sky'],
-      ['Day and night embrace','Abundance without end','The earth breathes out warmth','Even stones are sleeping','Growth has no master']
-    ],
-    Autumn: [
-      ['Crimson leaves let go','The wind takes its tithe','Branches bare their scars','Smoke colors the distance','Fruit falls to the soil'],
-      ['Stones remember green','Bees seek the last bloom','A hush through the garden','Colors burn then fade','Roots prepare for rest'],
-      ['Beauty is surrender','Letting go is love','What falls becomes seed','The old makes way','Autumn holds no grief']
-    ],
-    Winter: [
-      ['Snow covers the stones','White breath, white sky, white bone','The garden holds its ghosts','Ice on sleeping branches','A single crow calls'],
-      ['Silent roots dream on','Dead names wear moss and frost','Stars watch over all','Nothing moves but wind','Memory is warmth'],
-      ['Spring waits beneath snow','Death is just a season','Stillness is a gift','What sleeps will awaken','The circle holds true']
-    ]
-  }[season];
+class AudioEngine{constructor(){this.ctx=null;this.muted=true;this.nodes={};this.nextInsect=0;this.nextBird=0}init(){if(this.ctx)return;const AC=window.AudioContext||window.webkitAudioContext;this.ctx=new AC();this.master=this.ctx.createGain();this.master.gain.value=.0001;this.master.connect(this.ctx.destination);const bufSize=2*this.ctx.sampleRate,makeNoise=brown=>{const b=this.ctx.createBuffer(1,bufSize,this.ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<bufSize;i++){const w=Math.random()*2-1;d[i]=brown?((i===0)?w:(d[i-1]+w*.02)/1.02):w}return b};this.nodes.windSrc=this.ctx.createBufferSource();this.nodes.windSrc.buffer=makeNoise(true);this.nodes.windSrc.loop=true;this.nodes.windFilter=this.ctx.createBiquadFilter();this.nodes.windFilter.type='lowpass';this.nodes.windFilter.frequency.value=350;this.nodes.windGain=this.ctx.createGain();this.nodes.windSrc.connect(this.nodes.windFilter);this.nodes.windFilter.connect(this.nodes.windGain);this.nodes.windGain.connect(this.master);this.nodes.windSrc.start();this.nodes.rainSrc=this.ctx.createBufferSource();this.nodes.rainSrc.buffer=makeNoise(false);this.nodes.rainSrc.loop=true;this.nodes.rainFilter=this.ctx.createBiquadFilter();this.nodes.rainFilter.type='bandpass';this.nodes.rainFilter.frequency.value=750;this.nodes.rainFilter.Q.value=.7;this.nodes.rainGain=this.ctx.createGain();this.nodes.rainGain.gain.value=0;this.nodes.rainSrc.connect(this.nodes.rainFilter);this.nodes.rainFilter.connect(this.nodes.rainGain);this.nodes.rainGain.connect(this.master);this.nodes.rainSrc.start();this.nodes.insectGain=this.ctx.createGain();this.nodes.insectGain.gain.value=0;this.nodes.insectGain.connect(this.master);this.nodes.birdGain=this.ctx.createGain();this.nodes.birdGain.gain.value=0;this.nodes.birdGain.connect(this.master)}toggle(){if(!this.ctx)this.init();this.muted=!this.muted;const t=this.muted?.0001:.55;this.master.gain.setTargetAtTime(t,this.ctx.currentTime,.6);document.getElementById('sound-btn').textContent=this.muted?'Sound: off':'Sound: on';cfg.audioEnabled=!this.muted;if(!this.muted&&this.ctx.state==='suspended')this.ctx.resume()}update(){if(!this.ctx||this.muted)return;const now=this.ctx.currentTime,w=sm.get('wind','wind')+(mouse.windBoost*.6);this.nodes.windGain.gain.setTargetAtTime(clamp(w*.16,0,.22),now,.25);this.nodes.windFilter.frequency.setTargetAtTime(180+w*950,now,.35);const raining=weather.raining;this.nodes.rainGain.gain.setTargetAtTime(raining?clamp(sm.get('rainChance','rainChance')*.55,0,.32):0,now,.45);const season=seasons[sm.idx].name,dayT=(sm.frame%cfg.seasonFrames)/cfg.seasonFrames,insects=(season==='Spring'||season==='Summer')&&(dayT<.3||dayT>.7);if(insects&&now>this.nextInsect){this.chirp(now,rand(3500,6500),.014,'insect');this.nextInsect=now+rand(.25,1.1)}this.nodes.insectGain.gain.setTargetAtTime(insects?.035:0,now,1.2);const birds=(dayT>.12&&dayT<.38&&season!=='Winter'&&season!=='Autumn');if(birds&&now>this.nextBird&&Math.random()<.25){this.chirp(now,rand(2200,4800),.025,'bird');this.nextBird=now+rand(1.2,4.5)}}chirp(now,freq,vol,type){const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type=type==='bird'?'sine':'triangle';o.frequency.setValueAtTime(freq,now);const dur=type==='bird'?rand(.08,.16):rand(.04,.09);if(type==='bird'){o.frequency.exponentialRampToValueAtTime(freq*rand(1.3,1.9),now+dur*.5);o.frequency.exponentialRampToValueAtTime(freq*.8,now+dur)}else{o.frequency.linearRampToValueAtTime(freq+rand(-350,350),now+dur)}g.gain.setValueAtTime(0,now);g.gain.linearRampToValueAtTime(vol,now+.01);g.gain.exponentialRampToValueAtTime(.0001,now+dur);o.connect(g);g.connect(type==='bird'?this.nodes.birdGain:this.nodes.insectGain);o.start(now);o.stop(now+dur+.05)}}
+const audio=new AudioEngine();
 
-  // Bias based on emotional state
-  let set = randInt(0, 5);
-  if (memories > living && season !== 'Winter') set = 2; // melancholy
-  if (bees > 5 && season === 'Summer' && dayT > 0.6) set = 1; // magical evening
-  if (living === 0) set = 4; // sparse
-  return `${lines[0][set]}<br>${lines[1][set]}<br>${lines[2][set]}`;
-}
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H,groundY;
+const stars=[];for(let i=0;i<200;i++)stars.push({x:rand(0,1),y:rand(0,.55),s:rand(.4,1.8),tw:rand(0,Math.PI*2)});
 
-/* ---------------------------------------------------------------
-   Audio Engine
-   --------------------------------------------------------------- */
-class AudioEngine {
-  constructor() { this.ctx = null; this.muted = true; this.nodes = {}; this.nextInsect = 0; this.nextBird = 0; }
-  init() {
-    if (this.ctx) return;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    this.ctx = new AC();
-    this.master = this.ctx.createGain();
-    this.master.gain.value = 0.0001;
-    this.master.connect(this.ctx.destination);
+function resize(){W=window.innerWidth;H=window.innerHeight;canvas.width=W;canvas.height=H;groundY=H*.76}
+window.addEventListener('resize',resize);
+function terrainHeight(x){return groundY+Math.sin(x*.0016+1.1)*22+Math.sin(x*.0047)*7+Math.sin(x*.011)*2.5}
 
-    const bufSize = 2 * this.ctx.sampleRate;
-    const makeNoise = (brown) => {
-      const b = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
-      const d = b.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) {
-        const w = Math.random() * 2 - 1;
-        d[i] = brown ? ((i===0)?w:(d[i-1]+w*0.02)/1.02) : w;
-      }
-      return b;
-    };
+function drawSky(){const g=ctx.createLinearGradient(0,0,0,groundY);g.addColorStop(0,hsl(sm.get('skyTop',0),sm.get('skyTop',1),sm.get('skyTop',2)));g.addColorStop(1,hsl(sm.get('skyBot',0),sm.get('skyBot',1),sm.get('skyBot',2)));ctx.fillStyle=g;ctx.fillRect(0,0,W,groundY)}
 
-    this.nodes.windSrc = this.ctx.createBufferSource();
-    this.nodes.windSrc.buffer = makeNoise(true);
-    this.nodes.windSrc.loop = true;
-    this.nodes.windFilter = this.ctx.createBiquadFilter();
-    this.nodes.windFilter.type = 'lowpass';
-    this.nodes.windFilter.frequency.value = 350;
-    this.nodes.windGain = this.ctx.createGain();
-    this.nodes.windSrc.connect(this.nodes.windFilter);
-    this.nodes.windFilter.connect(this.nodes.windGain);
-    this.nodes.windGain.connect(this.master);
-    this.nodes.windSrc.start();
+function drawCelestial(){const dayT=(sm.frame%cfg.seasonFrames)/cfg.seasonFrames,sunX=W*dayT,arcH=110+(seasons[sm.idx].name==='Summer'?190:seasons[sm.idx].name==='Winter'?50:130)*Math.sin(dayT*Math.PI),sunY=groundY-arcH,sunColor=hsl(sm.get('sun',0),sm.get('sun',1),sm.get('sun',2)),brightness=Math.sin(dayT*Math.PI);let starAlpha=clamp(1-brightness*2.8,0,1);if(seasons[sm.idx].name==='Winter')starAlpha=Math.max(starAlpha,.35);if(starAlpha>.01){const t=Date.now()*.0018;ctx.fillStyle=`rgba(255,255,255,${starAlpha})`;for(const s of stars){const tw=.6+Math.sin(t+s.tw)*.4;ctx.globalAlpha=starAlpha*tw;ctx.beginPath();ctx.arc(s.x*W,s.y*H,s.s*.55,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1}const glow=ctx.createRadialGradient(sunX,sunY,5,sunX,sunY,140);glow.addColorStop(0,sunColor);glow.addColorStop(.45,hsl(sm.get('sun',0),sm.get('sun',1),sm.get('sun',2),.22));glow.addColorStop(1,hsl(sm.get('sun',0),sm.get('sun',1),sm.get('sun',2),0));ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sunX,sunY,160,0,Math.PI*2);ctx.fill();const moonX=W*((dayT+.5)%1),moonY=groundY-85-Math.sin(((dayT+.5)%1)*Math.PI)*70,mb=clamp(1-brightness*1.4,0,1);if(mb>.01){ctx.fillStyle=`rgba(245,248,255,${mb})`;ctx.beginPath();ctx.arc(moonX,moonY,13,0,Math.PI*2);ctx.fill();const mg=ctx.createRadialGradient(moonX,moonY,4,moonX,moonY,48);mg.addColorStop(0,`rgba(245,248,255,${mb*.28})`);mg.addColorStop(1,`rgba(245,248,255,0)`);ctx.fillStyle=mg;ctx.beginPath();ctx.arc(moonX,moonY,58,0,Math.PI*2);ctx.fill()}}
 
-    this.nodes.rainSrc = this.ctx.createBufferSource();
-    this.nodes.rainSrc.buffer = makeNoise(false);
-    this.nodes.rainSrc.loop = true;
-    this.nodes.rainFilter = this.ctx.createBiquadFilter();
-    this.nodes.rainFilter.type = 'bandpass';
-    this.nodes.rainFilter.frequency.value = 750;
-    this.nodes.rainFilter.Q.value = 0.7;
-    this.nodes.rainGain = this.ctx.createGain();
-    this.nodes.rainGain.gain.value = 0;
-    this.nodes.rainSrc.connect(this.nodes.rainFilter);
-    this.nodes.rainFilter.connect(this.nodes.rainGain);
-    this.nodes.rainGain.connect(this.master);
-    this.nodes.rainSrc.start();
+function drawTerrain(){const h=sm.get('ground',0),s=sm.get('ground',1),l=sm.get('ground',2);ctx.fillStyle=hsl(h,s-5,l-6);ctx.beginPath();ctx.moveTo(0,H);for(let x=0;x<=W;x+=10)ctx.lineTo(x,terrainHeight(x)-22);ctx.lineTo(W,H);ctx.fill();const g=ctx.createLinearGradient(0,groundY-30,0,H);g.addColorStop(0,hsl(h,s,l));g.addColorStop(1,hsl(h,s+3,l-9));ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(0,H);for(let x=0;x<=W;x+=8)ctx.lineTo(x,terrainHeight(x));ctx.lineTo(W,H);ctx.fill()}
 
-    this.nodes.insectGain = this.ctx.createGain();
-    this.nodes.insectGain.gain.value = 0;
-    this.nodes.insectGain.connect(this.master);
+const wind={time:0,get(x,y){const t=this.time,n=Noise(x*.0018+t*.25,y*.0028+t*.12),gust=Noise(x*.007+t,y*.007),strength=sm.get('wind','wind')*.55+mouse.windBoost;return(n*.65+gust*.35)*strength*(1+(groundY-y)/260)},update(){this.time+=.016}};
 
-    this.nodes.birdGain = this.ctx.createGain();
-    this.nodes.birdGain.gain.value = 0;
-    this.nodes.birdGain.connect(this.master);
-  }
-  toggle() {
-    if (!this.ctx) this.init();
-    this.muted = !this.muted;
-    const t = this.muted ? 0.0001 : 0.55;
-    this.master.gain.setTargetAtTime(t, this.ctx.currentTime, 0.6);
-    document.getElementById('mute').textContent = this.muted ? 'Sound: off' : 'Sound: on';
-    cfg.audioEnabled = !this.muted;
-    if (!this.muted && this.ctx.state === 'suspended') this.ctx.resume();
-  }
-  update() {
-    if (!this.ctx || this.muted) return;
-    const now = this.ctx.currentTime;
-    const w = sm.get('wind','wind') + (mouse.windBoost * 0.6);
-    this.nodes.windGain.gain.setTargetAtTime(clamp(w * 0.16, 0, 0.22), now, 0.25);
-    this.nodes.windFilter.frequency.setTargetAtTime(180 + w * 950, now, 0.35);
+class DNA{constructor(parent=null){if(parent){this.hue=mutate(parent.hue,22);this.sat=clamp(mutate(parent.sat,10),25,78);this.light=clamp(mutate(parent.light,9),22,52);this.flowerHue=mutate(parent.flowerHue,32);this.branchAngle=clamp(mutate(parent.branchAngle,.1),.3,.9);this.segLen=clamp(mutate(parent.segLen,3.5),15,36);this.thickness=clamp(mutate(parent.thickness,.7),2.5,8.5);this.maxDepth=clamp(Math.round(mutate(parent.maxDepth,1)),4,8);this.growthRate=clamp(mutate(parent.growthRate,.22),.65,1.9);this.leafSize=clamp(mutate(parent.leafSize,2.2),5.5,15);this.flowerSize=clamp(mutate(parent.flowerSize,1.2),3.2,8);this.tropism=clamp(mutate(parent.tropism,.025),0,.16)}else{this.hue=rand(88,148);this.sat=rand(38,62);this.light=rand(30,46);this.flowerHue=rand(0,360);this.branchAngle=rand(.45,.68);this.segLen=rand(22,30);this.thickness=rand(4,6.5);this.maxDepth=randInt(5,8);this.growthRate=rand(.95,1.25);this.leafSize=rand(8,13);this.flowerSize=rand(4.2,6.5);this.tropism=rand(.03,.1)}}static cross(a,b){const mix=k=>lerp(a[k],b[k],.5),d=new DNA(a);d.hue=mix('hue');d.sat=mix('sat');d.light=mix('light');d.flowerHue=mix('flowerHue');d.branchAngle=mix('branchAngle');d.segLen=mix('segLen');d.thickness=mix('thickness');d.maxDepth=Math.round(mix('maxDepth'));d.growthRate=mix('growthRate');d.leafSize=mix('leafSize');d.flowerSize=mix('flowerSize');d.tropism=mix('tropism');return new DNA(d)}}
+function mutate(v,a){return v+rand(-a,a)}
 
-    const raining = weather.raining;
-    this.nodes.rainGain.gain.setTargetAtTime(raining ? clamp(sm.get('rainChance','rainChance')*0.55,0,0.32) : 0, now, 0.45);
+class Leaf{constructor(angle,size){this.baseAngle=angle;this.size=size;this.scale=0;this.state=0;this.stateTimer=0;this.hueOff=rand(-12,12);this.dropVx=rand(-1.2,1.2);this.dropVy=rand(.6,2.2);this.dropRot=rand(-.12,.12);this.dropX=0;this.dropY=0}update(growth,season){if(this.state===3){this.dropX+=this.dropVx+wind.get(this.dropX,this.dropY)*8;this.dropY+=this.dropVy;return}const target=growth>.38?1:(growth/.38);this.scale+=(target-this.scale)*.035;if(season==='Autumn'&&this.state<2&&growth>.8){this.stateTimer++;if(this.stateTimer>rand(140,450))this.state=2}else if(season==='Winter'){if(Math.random()<.012)this.state=3}else if(season==='Spring'&&this.state===2){if(Math.random()<.006)this.state=1}}color(baseHue,baseSat,baseLight,season){if(this.state===0)return hsl(baseHue+10,baseSat-10,baseLight-5);if(this.state===1)return hsl(baseHue+this.hueOff,baseSat,baseLight+8);if(this.state===2){const t=clamp((this.stateTimer-140)/320,0,1);return hsl(lerp(baseHue+this.hueOff,rand(18,42),t),lerp(baseSat,78,t*.45),lerp(baseLight+8,46,t))}return'rgba(0,0,0,0)'}draw(ctx,x,y,branchAngle,baseHue,baseSat,baseLight,season,zScale){if(this.scale<.01)return;if(this.state===3){ctx.save();ctx.translate(this.dropX,this.dropY);ctx.rotate(branchAngle+this.dropRot*12);ctx.scale(this.size*zScale*.75,this.size*zScale*.75);leafPath(ctx);ctx.fillStyle=hsl(32,52,34,.8);ctx.fill();ctx.restore();return}ctx.save();ctx.translate(x,y);ctx.rotate(branchAngle+this.baseAngle);const s=this.size*this.scale*zScale;ctx.scale(s,s);ctx.fillStyle=this.color(baseHue,baseSat,baseLight,season);leafPath(ctx);ctx.fill();ctx.strokeStyle='rgba(0,0,0,0.1)';ctx.lineWidth=.25;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-5);ctx.stroke();ctx.restore()}}
+function leafPath(ctx){ctx.beginPath();ctx.moveTo(0,0);ctx.bezierCurveTo(2,-2,3,-5,0,-9);ctx.bezierCurveTo(-3,-5,-2,-2,0,0);ctx.closePath()}
 
-    const season = seasons[sm.idx].name;
-    const dayT = (sm.frame % cfg.seasonFrames) / cfg.seasonFrames;
-    const insects = (season === 'Spring' || season === 'Summer') && (dayT < 0.3 || dayT > 0.7);
-    if (insects && now > this.nextInsect) {
-      this.chirp(now, rand(3500, 6500), 0.014, 'insect');
-      this.nextInsect = now + rand(0.25, 1.1);
-    }
-    this.nodes.insectGain.gain.setTargetAtTime(insects ? 0.035 : 0, now, 1.2);
+class Flower{constructor(size,hueOff){this.size=size;this.hueOff=hueOff;this.bloom=0;this.wilt=0;this.state='bud';this.petalCount=randInt(5,9)}update(growth,season){const gm=sm.get('growth','growth');if(season==='Winter'){this.bloom=Math.max(0,this.bloom-.018);this.wilt=Math.min(1,this.wilt+.014);this.state='wilt';return}if(growth>.86&&season!=='Autumn'){if(this.state==='bud')this.state='bloom';if(this.state==='bloom'){this.bloom=Math.min(1,this.bloom+.007*gm);this.wilt=Math.max(0,this.wilt-.008)}}else{this.bloom=Math.max(0,this.bloom-.008);if(this.bloom<=.04)this.state='bud'}if(season==='Autumn'&&this.bloom>.45)this.wilt=Math.min(1,this.wilt+.006)}draw(ctx,x,y,branchAngle,hue,zScale){if(this.bloom<.01){if(this.state==='bud'){ctx.fillStyle=hsl(hue+32,58,38);ctx.beginPath();ctx.arc(x,y,this.size*zScale*.5,0,Math.PI*2);ctx.fill()}return}const s=this.size*this.bloom*zScale,wiltAngle=this.wilt*.55,fh=hue+this.hueOff;for(let i=0;i<this.petalCount;i++){const ang=(i/this.petalCount)*Math.PI*2+branchAngle;ctx.save();ctx.translate(x,y);ctx.rotate(ang);ctx.rotate(wiltAngle);const px=Math.sin(i*2.2)*1.3*this.wilt;ctx.translate(px,-s*.55);ctx.scale(s*.48,s*.88);ctx.fillStyle=hsl(fh,78,64-this.wilt*18);ctx.beginPath();ctx.moveTo(0,0);ctx.bezierCurveTo(1,-1,1,-3,0,-4);ctx.bezierCurveTo(-1,-3,-1,-1,0,0);ctx.fill();ctx.restore()}ctx.fillStyle=hsl(fh+42,88,74-this.wilt*26);ctx.beginPath();ctx.arc(x,y,s*.32,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(255,242,200,0.9)';for(let i=0;i<5;i++){const a=i*1.256+branchAngle;ctx.beginPath();ctx.arc(x+Math.cos(a)*s*.14,y+Math.sin(a)*s*.14,s*.07,0,Math.PI*2);ctx.fill()}}}
 
-    const birds = (dayT > 0.12 && dayT < 0.38 && season !== 'Winter' && season !== 'Autumn');
-    if (birds && now > this.nextBird && Math.random() < 0.25) {
-      this.chirp(now, rand(2200, 4800), 0.025, 'bird');
-      this.nextBird = now + rand(1.2, 4.5);
-    }
-  }
-  chirp(now, freq, vol, type) {
-    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
-    o.type = type === 'bird' ? 'sine' : 'triangle';
-    o.frequency.setValueAtTime(freq, now);
-    const dur = type === 'bird' ? rand(0.08, 0.16) : rand(0.04, 0.09);
-    if (type === 'bird') {
-      o.frequency.exponentialRampToValueAtTime(freq * rand(1.3, 1.9), now + dur * 0.5);
-      o.frequency.exponentialRampToValueAtTime(freq * 0.8, now + dur);
-    } else {
-      o.frequency.linearRampToValueAtTime(freq + rand(-350, 350), now + dur);
-    }
-    g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(vol, now + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    o.connect(g); g.connect(type==='bird'?this.nodes.birdGain:this.nodes.insectGain);
-    o.start(now); o.stop(now + dur + 0.05);
-  }
-}
-const audio = new AudioEngine();
+class Branch{constructor(parent,depth,baseAngle,maxLen,thickness,dna){this.parent=parent;this.depth=depth;this.baseAngle=baseAngle;this.angle=baseAngle;this.angularVel=0;this.maxLen=maxLen;this.thickness=thickness;this.grown=0;this.endX=0;this.endY=0;this.children=[];this.leaf=Math.random()>.38?new Leaf(rand(-.55,.55),dna.leafSize*rand(.85,1.25)):null;this.flower=(Math.random()>.62&&depth>2)?new Flower(dna.flowerSize*rand(.85,1.15),rand(-18,18)):null}update(growthRatio,x,y,parentGlobalAngle){const myGrowth=Math.pow(growthRatio,1+this.depth*.2),len=this.maxLen*myGrowth;this.grown=myGrowth;const wx=x+Math.cos(parentGlobalAngle+this.angle)*(len*.55),wy=y+Math.sin(parentGlobalAngle+this.angle)*(len*.55),wf=wind.get(wx,wy),torqueWind=wf*(1+this.depth*.35)*.014,torqueGravity=-cfg.gravity*this.depth*.018,torqueSpring=(this.baseAngle-this.angle)*(.055-this.depth*.0025);this.angularVel+=torqueWind+torqueGravity+torqueSpring;this.angularVel*=.925;this.angle+=this.angularVel;const globalAngle=parentGlobalAngle+this.angle;this.endX=x+Math.cos(globalAngle)*len;this.endY=y+Math.sin(globalAngle)*len;this.rx=x;this.ry=y;this.rang=globalAngle;this.rlen=len;for(const c of this.children)c.update(growthRatio,this.endX,this.endY,globalAngle)}draw(ctx,sHS,sSat,sLight,zScale,bH,bS,bL,season){if(this.grown<.01)return;const len=this.rlen,ang=this.rang,w1=this.thickness*zScale*this.grown,w2=this.thickness*.62*zScale*this.grown,perp=ang+Math.PI/2,x0=this.rx-Math.cos(perp)*w1*.5,y0=this.ry-Math.sin(perp)*w1*.5,x1=this.rx+Math.cos(perp)*w1*.5,y1=this.ry+Math.sin(perp)*w1*.5,x2=this.endX+Math.cos(perp)*w2*.5,y2=this.endY+Math.sin(perp)*w2*.5,x3=this.endX-Math.cos(perp)*w2*.5,y3=this.endY-Math.sin(perp)*w2*.5,h=bH+(this.depth*-2.5)+sHS,s=clamp(bS+sSat-this.depth*1.8,0,100),l=clamp(bL+sLight+this.depth*2.8,0,95);ctx.fillStyle=hsl(h,s,l);ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.lineTo(x2,y2);ctx.lineTo(x3,y3);ctx.closePath();ctx.fill();if(this.leaf)this.leaf.draw(ctx,this.endX,this.endY,ang,bH,bS,bL,season,zScale);if(this.flower)this.flower.draw(ctx,this.endX,this.endY,ang,bH+(this.leaf?.hueOff||0),zScale);for(const c of this.children)c.draw(ctx,sHS,sSat,sLight,zScale,bH,bS,bL,season)}}
 
-/* ---------------------------------------------------------------
-   Canvas & Atmosphere
-   --------------------------------------------------------------- */
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-let W, H, groundY;
-const stars = [];
-for (let i = 0; i < 200; i++) stars.push({ x: rand(0, 1), y: rand(0, 0.55), s: rand(0.4, 1.8), tw: rand(0, Math.PI * 2) });
+class Plant{constructor(x,z,dna=null){this.x=x;this.z=z;this.y=terrainHeight(x);this.dna=dna||new DNA();this.name=generateName();this.birthFrame=sm.frame;this.age=0;this.maturity=rand(550,950);this.dead=false;this.health=1;this.tended=0;this.firstBloom=false;this.root=null;this.build()}build(){const add=(parent,depth,angle)=>{const len=this.dna.segLen*Math.pow(.76,depth)*rand(.88,1.15),thick=this.dna.thickness*Math.pow(.7,depth),b=new Branch(parent,depth,angle,len,thick,this.dna);if(parent)parent.children.push(b);else this.root=b;if(depth<this.dna.maxDepth){const count=Math.random()>.82?3:2;for(let i=0;i<count;i++){const spread=(i-(count-1)/2)*this.dna.branchAngle;add(b,depth+1,angle+spread+rand(-.09,.09)+this.dna.tropism*depth)}}};add(null,0,-Math.PI/2+rand(-.07,.07))}update(season,cursorDist){const gm=sm.get('growth','growth');if(cursorDist<80){this.tended+=1;this.health=Math.min(1,this.health+.003)}const tendBonus=1+Math.min(this.tended/300,.25);if(gm>0&&this.age<this.maturity)this.age+=this.dna.growthRate*gm*tendBonus;const ratio=Math.min(1,this.age/this.maturity);this.root.update(ratio,this.x,this.y,0);if(!this.firstBloom&&this.root){let hasOpen=false;this.visit(b=>{if(b.flower&&b.flower.state==='bloom'&&b.flower.bloom>.6)hasOpen=true});if(hasOpen){this.firstBloom=true;for(let i=0;i<14;i++)weather.addParticle(this.x,this.y-20,'pollen',this.dna.flowerHue)}}if(season==='Winter')this.health-=.00022;else if(season==='Spring')this.health=Math.min(1,this.health+.00035);if(this.health<=0)this.dead=true}visit(fn){const stack=[this.root];while(stack.length){const b=stack.pop();fn(b);for(const c of b.children)stack.push(c)}}draw(ctx,season){const zScale=.7+this.z*.3,fog=1-this.z*.32,seasonHueShift=season==='Autumn'?-42:(season==='Winter'?155:0),seasonSat=season==='Winter'?-32:(season==='Autumn'?12:0),seasonLight=season==='Winter'?16:(season==='Autumn'?7:0),dayT=(sm.frame%cfg.seasonFrames)/cfg.seasonFrames,sunAngle=(dayT-.5)*.55,shadowLen=(26+this.dna.maxDepth*5)*zScale,sx=this.x+Math.sin(sunAngle)*shadowLen,sy=this.y+2;ctx.fillStyle=`rgba(8,12,10,${.14*this.z+.04})`;ctx.beginPath();ctx.ellipse(sx,sy,(11+this.dna.maxDepth*3.5)*zScale,3.2*zScale,sunAngle*.25,0,Math.PI*2);ctx.fill();ctx.save();this.root.draw(ctx,seasonHueShift,seasonSat+(1-fog)*-18,seasonLight+(1-fog)*-9,zScale,this.dna.hue,this.dna.sat,this.dna.light,season);ctx.restore()}drawSkeleton(ctx){const zScale=.7+this.z*.3,drawBone=(b,x,y,pa)=>{if(b.grown<.01)return;const len=b.rlen*.85,ang=b.rang,ex=x+Math.cos(ang)*len,ey=y+Math.sin(ang)*len;ctx.strokeStyle=`rgba(220,225,230,${.12+this.z*.08})`;ctx.lineWidth=Math.max(.4,b.thickness*zScale*b.grown*.35);ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(ex,ey);ctx.stroke();for(const c of b.children)drawBone(c,ex,ey,ang)};drawBone(this.root,this.x,this.y,0)}}
 
-function resize() {
-  W = window.innerWidth; H = window.innerHeight;
-  canvas.width = W; canvas.height = H;
-  groundY = H * 0.76;
-}
-window.addEventListener('resize', resize);
+class Bee{constructor(){this.x=rand(0,W);this.y=rand(terrainHeight(this.x)-240,terrainHeight(this.x)-35);this.vx=rand(-2,2);this.vy=rand(-1,1);this.maxSpeed=rand(2.4,4.2);this.target=null;this.carrying=false;this.idle=0;this.size=rand(2.2,3.4);this.hoverPhase=rand(0,Math.PI*2)}update(){const activity=sm.get('bee','bee');if(activity<.05){this.x+=this.vx*.05;this.y+=this.vy*.05;if(this.y<-30)this.y=-30;return}this.hoverPhase+=.14;this.vx+=rand(-.22,.22)+Math.sin(this.hoverPhase)*.35;this.vy+=rand(-.22,.22)+Math.cos(this.hoverPhase*2)*.18;if(!this.target||Math.random()<.007)this.pickTarget();if(this.target){const dx=this.target.endX-this.x,dy=this.target.endY-this.y,d=Math.hypot(dx,dy);if(d<8){const plant=findPlant(this.target);if(plant){if(!this.carrying&&this.target.flower&&this.target.flower.bloom>.5){this.carrying=true;for(let i=0;i<4;i++)weather.addParticle(this.x,this.y,'pollen',plant.dna.flowerHue)}else if(this.carrying&&plants.length<cfg.maxPlants&&Math.random()<.1){const sx=clamp(plant.x+rand(-100,100),30,W-30),sz=clamp(plant.z+rand(-.25,.25),0,1);plants.push(new Plant(sx,sz,DNA.cross(plant.dna,plant.dna)));this.carrying=false}}this.target=null;this.idle=rand(20,70)}else{this.vx+=(dx/d)*.11;this.vy+=(dy/d)*.11}}if(this.x<0)this.vx+=.16;if(this.x>W)this.vx-=.16;const gy=terrainHeight(this.x);if(this.y<gy-300)this.vy+=.16;if(this.y>gy-12)this.vy-=.16;const limit=this.idle>0?this.maxSpeed*.32:this.maxSpeed*activity,sp=Math.hypot(this.vx,this.vy);if(sp>limit){this.vx=(this.vx/sp)*limit;this.vy=(this.vy/sp)*limit}this.x+=this.vx;this.y+=this.vy;if(this.idle>0)this.idle--}pickTarget(){const candidates=[];for(const p of plants){p.visit(b=>{if(b.flower&&b.flower.bloom>.25&&b.flower.state!=='wilt'){const d=dist(this.x,this.y,b.endX,b.endY);if(d<280)candidates.push({b,d})}})}if(candidates.length){candidates.sort((a,b)=>a.d-b.d);this.target=candidates[randInt(0,Math.min(3,candidates.length-1))].b}}draw(ctx){if(sm.get('bee','bee')<.05)return;const ang=Math.atan2(this.vy,this.vx);ctx.save();ctx.translate(this.x,this.y);ctx.rotate(ang);ctx.fillStyle='#f2c12e';ctx.beginPath();ctx.ellipse(0,0,this.size*2.1,this.size,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#1a1a1a';for(let i=-1;i<=1;i++){ctx.beginPath();ctx.arc(i*this.size*.85,0,this.size*.52,0,Math.PI*2);ctx.fill()}if(this.carrying){ctx.fillStyle='#d4a017';ctx.beginPath();ctx.ellipse(-this.size,this.size*.55,this.size*.55,this.size*.32,.4,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(-this.size,-this.size*.55,this.size*.55,this.size*.32,-.4,0,Math.PI*2);ctx.fill()}const wf=.08,wa=4.5,t=Date.now()*wf;for(let k=0;k<3;k++){const phase=(t-k*.7)%(Math.PI*2),wy=Math.sin(phase)*wa*.55;ctx.fillStyle=`rgba(255,255,255,${.32-k*.09})`;ctx.beginPath();ctx.ellipse(0,-this.size-2+wy,this.size*1.5,this.size*.45,.22,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(0,this.size+2-wy,this.size*1.5,this.size*.45,-.22,0,Math.PI*2);ctx.fill()}ctx.restore()}}
+function findPlant(branch){for(const p of plants){let f=false;p.visit(b=>{if(b===branch)f=true});if(f)return p}return null}
 
-function terrainHeight(x) {
-  return groundY + Math.sin(x * 0.0016 + 1.1) * 22 + Math.sin(x * 0.0047) * 7 + Math.sin(x * 0.011) * 2.5;
-}
+class Firefly{constructor(){this.x=rand(0,W);this.y=rand(terrainHeight(this.x)-220,terrainHeight(this.x)-20);this.vx=rand(-.6,.6);this.vy=rand(-.4,.4);this.phase=rand(0,Math.PI*2);this.size=rand(1.2,2.4);this.target=null}update(){const season=seasons[sm.idx].name,dayT=(sm.frame%cfg.seasonFrames)/cfg.seasonFrames,active=(season==='Summer'&&dayT>.55)||(season==='Spring'&&dayT>.65);if(!active){this.y=-50;return}const flowerTargets=[];for(const p of plants){p.visit(b=>{if(b.flower&&b.flower.bloom>.4)flowerTargets.push({x:b.endX,y:b.endY})})}let tx=mouse.x,ty=mouse.y,weight=.25;if(flowerTargets.length&&Math.random()<.3){const t=flowerTargets[randInt(0,flowerTargets.length-1)];tx=t.x;ty=t.y;weight=.18}this.vx+=(tx-this.x)*.0008*weight+rand(-.08,.08);this.vy+=(ty-this.y)*.0008*weight+rand(-.08,.08);const sp=Math.hypot(this.vx,this.vy);if(sp>1.6){this.vx=(this.vx/sp)*1.6;this.vy=(this.vy/sp)*1.6}this.x+=this.vx;this.y+=this.vy;this.phase+=.12}draw(ctx){const season=seasons[sm.idx].name,dayT=(sm.frame%cfg.seasonFrames)/cfg.seasonFrames;if(!(season==='Summer'&&dayT>.55)&&!(season==='Spring'&&dayT>.65))return;const glow=.5+Math.sin(this.phase)*.5;ctx.fillStyle=`rgba(200,255,140,${glow})`;ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2);ctx.fill();const rg=ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.size*5);rg.addColorStop(0,`rgba(200,255,140,${glow*.35})`);rg.addColorStop(1,'rgba(200,255,140,0)');ctx.fillStyle=rg;ctx.beginPath();ctx.arc(this.x,this.y,this.size*5,0,Math.PI*2);ctx.fill()}}
 
-function drawSky() {
-  const g = ctx.createLinearGradient(0, 0, 0, groundY);
-  g.addColorStop(0, hsl(sm.get('skyTop',0), sm.get('skyTop',1), sm.get('skyTop',2)));
-  g.addColorStop(1, hsl(sm.get('skyBot',0), sm.get('skyBot',1), sm.get('skyBot',2)));
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, groundY);
-}
+class Memory{constructor(x,z,y,name,frame){this.x=x;this.z=z;this.y=y;this.name=name;this.deathFrame=frame;this.moss=0}draw(ctx,season){const zScale=.7+this.z*.3;this.moss=Math.min(1,this.moss+.002);const age=(sm.frame-this.deathFrame)/1200,alpha=clamp(.55+this.z*.25-age*.15,.15,.85),w=16*zScale,h=8*zScale;ctx.fillStyle=`rgba(145,150,155,${alpha})`;ctx.beginPath();ctx.ellipse(this.x,this.y-h*.3,w,h,0,0,Math.PI*2);ctx.fill();if(season!=='Winter'){ctx.fillStyle=`rgba(90,120,70,${alpha*.6*this.moss})`;ctx.beginPath();ctx.ellipse(this.x-w*.3,this.y-h*.5,w*.45,h*.55,-.2,0,Math.PI*2);ctx.fill()}if(season==='Winter'){ctx.fillStyle=`rgba(255,255,255,${alpha*.7})`;ctx.beginPath();ctx.ellipse(this.x,this.y-h*.6,w*.6,h*.35,0,0,Math.PI*2);ctx.fill()}ctx.fillStyle=`rgba(40,45,50,${alpha*.55})`;ctx.font=`${Math.max(6,8*zScale)}px 'IM Fell English',Georgia,serif`;ctx.textAlign='center';ctx.fillText(this.name,this.x,this.y-h*.15)}}
 
-function drawCelestial() {
-  const dayT = (sm.frame % cfg.seasonFrames) / cfg.seasonFrames;
-  const sunX = W * dayT;
-  const arcH = 110 + (seasons[sm.idx].name==='Summer'?190:seasons[sm.idx].name==='Winter'?50:130) * Math.sin(dayT * Math.PI);
-  const sunY = groundY - arcH;
-  const sunColor = hsl(sm.get('sun',0), sm.get('sun',1), sm.get('sun',2));
+const weather={particles:[],raining:false,rainAngle:0,update(){const season=seasons[sm.idx].name,chance=sm.get('rainChance','rainChance');this.raining=(season!=='Winter'&&season!=='Autumn')?(Math.random()<chance*.045):false;if(season==='Winter'&&Math.random()<.22)this.addParticle(rand(0,W),-5,'snow');if(this.raining){this.rainAngle=wind.get(W*.5,groundY*.5)*.45;for(let i=0;i<Math.floor(chance*5.5);i++)this.addParticle(rand(0,W),rand(-10,groundY-40),'rain')}for(let i=this.particles.length-1;i>=0;i--){const p=this.particles[i];p.x+=p.vx+wind.get(p.x,p.y)*(p.type==='snow'?2.8:1);p.y+=p.vy;p.life--;if(p.life<=0||p.y>H)this.particles.splice(i,1)}},addParticle(x,y,type,hue=0){if(type==='rain')this.particles.push({x,y,vx:this.rainAngle+rand(-.4,.4),vy:rand(11,17),life:rand(10,18),type,hue});else if(type==='snow')this.particles.push({x,y,vx:rand(-.9,.9),vy:rand(.9,2.6),life:rand(130,280),type,hue});else if(type==='pollen')this.particles.push({x,y,vx:rand(-1.1,1.1),vy:rand(-.6,1.3),life:rand(35,110),type,hue})},draw(ctx){for(const p of this.particles){if(p.type==='rain'){ctx.strokeStyle='rgba(205,218,235,0.32)';ctx.lineWidth=1.1;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x-p.vx*1.4,p.y-p.vy*1.1);ctx.stroke()}else if(p.type==='snow'){ctx.fillStyle=`rgba(255,255,255,${p.life/180})`;ctx.beginPath();ctx.arc(p.x,p.y,1.6,0,Math.PI*2);ctx.fill()}else if(p.type==='pollen'){ctx.fillStyle=hsl(p.hue,82,68,p.life/80);ctx.beginPath();ctx.arc(p.x,p.y,1.4,0,Math.PI*2);ctx.fill()}}}};
 
-  const brightness = Math.sin(dayT * Math.PI);
-  let starAlpha = clamp(1 - brightness * 2.8, 0, 1);
-  if (seasons[sm.idx].name === 'Winter') starAlpha = Math.max(starAlpha, 0.35);
-  if (starAlpha > 0.01) {
-    const t = Date.now() * 0.0018;
-    ctx.fillStyle = `rgba(255,255,255,${starAlpha})`;
-    for (const s of stars) {
-      const tw = 0.6 + Math.sin(t + s.tw) * 0.4;
-      ctx.globalAlpha = starAlpha * tw;
-      ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.s * 0.55, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-  }
+const mycelium={lines:[],lastUpdate:0,update(){if(sm.frame-this.lastUpdate<40)return;this.lastUpdate=sm.frame;this.lines.length=0;const season=seasons[sm.idx].name,night=1-Math.sin((sm.frame%cfg.seasonFrames)/cfg.seasonFrames*Math.PI)*1.2;if(night<=0||season==='Winter')return;for(let i=0;i<plants.length;i++){for(let j=i+1;j<plants.length;j++){const a=plants[i],b=plants[j],d=Math.hypot(a.x-b.x,a.y-b.y);if(d<90&&a.z>.3&&b.z>.3){const health=(a.health+b.health)*.5,alpha=clamp(night*health*.35,0,.55)*(1-d/90);this.lines.push({x1:a.x,y1:a.y,x2:b.x,y2:b.y,alpha,pulse:rand(0,Math.PI*2)})}}}},draw(ctx){const season=seasons[sm.idx].name;if(season==='Winter')return;const t=Date.now()*.002;for(const ln of this.lines){const glow=.6+Math.sin(t+ln.pulse)*.4;ctx.strokeStyle=`rgba(160,220,180,${ln.alpha*glow})`;ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(ln.x1,ln.y1);ctx.lineTo(ln.x2,ln.y2);ctx.stroke()}}};
 
-  const glow = ctx.createRadialGradient(sunX, sunY, 5, sunX, sunY, 140);
-  glow.addColorStop(0, sunColor);
-  glow.addColorStop(0.45, hsl(sm.get('sun',0), sm.get('sun',1), sm.get('sun',2), 0.22));
-  glow.addColorStop(1, hsl(sm.get('sun',0), sm.get('sun',1), sm.get('sun',2), 0));
-  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(sunX, sunY, 160, 0, Math.PI * 2); ctx.fill();
+const plants=[],bees=[],fireflies=[],memories=[];
+const mouse={x:0,y:0,down:false,windBoost:0};
+for(let i=0;i<cfg.maxFireflies;i++)fireflies.push(new Firefly());
 
-  const moonX = W * ((dayT + 0.5) % 1);
-  const moonY = groundY - 85 - Math.sin(((dayT + 0.5) % 1) * Math.PI) * 70;
-  const mb = clamp(1 - brightness * 1.4, 0, 1);
-  if (mb > 0.01) {
-    ctx.fillStyle = `rgba(245,248,255,${mb})`;
-    ctx.beginPath(); ctx.arc(moonX, moonY, 13, 0, Math.PI * 2); ctx.fill();
-    const mg = ctx.createRadialGradient(moonX, moonY, 4, moonX, moonY, 48);
-    mg.addColorStop(0, `rgba(245,248,255,${mb * 0.28})`);
-    mg.addColorStop(1, `rgba(245,248,255,0)`);
-    ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(moonX, moonY, 58, 0, Math.PI * 2); ctx.fill();
-  }
+function spawnPlants(){plants.length=0;const count=Math.min(cfg.maxPlants,Math.floor(W/24));for(let i=0;i<count;i++){const z=rand(0,1),p=new Plant(rand(30,W-30),z);p.age=rand(0,p.maturity);plants.push(p)}plants.sort((a,b)=>a.z-b.z)}
+function spawnBees(){bees.length=0;for(let i=0;i<cfg.maxBees;i++)bees.push(new Bee())}
 
-  const v = ctx.createRadialGradient(W * 0.5, groundY * 0.35, W * 0.18, W * 0.5, groundY * 0.35, W * 0.95);
-  v.addColorStop(0, 'rgba(255,255,255,0)');
-  v.addColorStop(1, `rgba(${seasons[sm.idx].name==='Winter'?'195,205,225':'8,12,22'},0.28)`);
-  ctx.fillStyle = v; ctx.fillRect(0, 0, W, groundY);
-}
+const tooltip=document.getElementById('tooltip');
+let hoveredPlant=null,lastHaikuFrame=-999;
 
-function drawTerrain() {
-  const h = sm.get('ground',0), s = sm.get('ground',1), l = sm.get('ground',2);
-  ctx.fillStyle = hsl(h, s - 5, l - 6);
-  ctx.beginPath(); ctx.moveTo(0, H);
-  for (let x = 0; x <= W; x += 10) ctx.lineTo(x, terrainHeight(x) - 22);
-  ctx.lineTo(W, H); ctx.fill();
-
-  const g = ctx.createLinearGradient(0, groundY - 30, 0, H);
-  g.addColorStop(0, hsl(h, s, l));
-  g.addColorStop(1, hsl(h, s + 3, l - 9));
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.moveTo(0, H);
-  for (let x = 0; x <= W; x += 8) ctx.lineTo(x, terrainHeight(x));
-  ctx.lineTo(W, H); ctx.fill();
-}
-
-/* ---------------------------------------------------------------
-   Wind
-   --------------------------------------------------------------- */
-const wind = {
-  time: 0,
-  get(x, y) {
-    const t = this.time;
-    const n = Noise(x * 0.0018 + t * 0.25, y * 0.0028 + t * 0.12);
-    const gust = Noise(x * 0.007 + t, y * 0.007);
-    const strength = sm.get('wind','wind') * 0.55 + mouse.windBoost;
-    return (n * 0.65 + gust * 0.35) * strength * (1 + (groundY - y) / 260);
-  },
-  update(){ this.time += 0.016; }
-};
-
-/* ---------------------------------------------------------------
-   DNA & Botany
-   --------------------------------------------------------------- */
-class DNA {
-  constructor(parent = null) {
-    if (parent) {
-      this.hue = mutate(parent.hue, 22); this.sat = clamp(mutate(parent.sat, 10), 25, 78);
-      this.light = clamp(mutate(parent.light, 9), 22, 52); this.flowerHue = mutate(parent.flowerHue, 32);
-      this.branchAngle = clamp(mutate(parent.branchAngle, 0.1), 0.3, 0.9);
-      this.segLen = clamp(mutate(parent.segLen, 3.5), 15, 36); this.thickness = clamp(mutate(parent.thickness, 0.7), 2.5, 8.5);
-      this.maxDepth = clamp(Math.round(mutate(parent.maxDepth, 1)), 4, 8);
-      this.growthRate = clamp(mutate(parent.growthRate, 0.22), 0.65, 1.9);
-      this.leafSize = clamp(mutate(parent.leafSize, 2.2), 5.5, 15);
-      this.flowerSize = clamp(mutate(parent.flowerSize, 1.2), 3.2, 8);
-      this.tropism = clamp(mutate(parent.tropism, 0.025), 0.0, 0.16);
-    } else {
-      this.hue = rand(88, 148); this.sat = rand(38, 62); this.light = rand(30, 46);
-      this.flowerHue = rand(0, 360); this.branchAngle = rand(0.45, 0.68);
-      this.segLen = rand(22, 30); this.thickness = rand(4, 6.5);
-      this.maxDepth = randInt(5, 8); this.growthRate = rand(0.95, 1.25);
-      this.leafSize = rand(8, 13); this.flowerSize = rand(4.2, 6.5);
-      this.tropism = rand(0.03, 0.1);
-    }
-  }
-  static cross(a, b) {
-    const mix = k => lerp(a[k], b[k], 0.5);
-    const d = new DNA(a);
-    d.hue = mix('hue'); d.sat = mix('sat'); d.light = mix('light'); d.flowerHue = mix('flowerHue');
-    d.branchAngle = mix('branchAngle'); d.segLen = mix('segLen'); d.thickness = mix('thickness');
-    d.maxDepth = Math.round(mix('maxDepth')); d.growthRate = mix('growthRate');
-    d.leafSize = mix('leafSize'); d.flowerSize = mix('flowerSize'); d.tropism = mix('tropism');
-    return new DNA(d);
-  }
-}
-function mutate(v, a){ return v + rand(-a, a); }
-
-
-class Leaf {
-  constructor(angle, size) {
-    this.baseAngle = angle; this.size = size; this.scale = 0; this.state = 0;
-    this.stateTimer = 0; this.hueOff = rand(-12, 12);
-    this.dropVx = rand(-1.2, 1.2); this.dropVy = rand(0.6, 2.2); this.dropRot = rand(-0.12, 0.12);
-    this.dropX = 0; this.dropY = 0;
-  }
-  update(growth, season) {
-    if (this.state === 3) {
-      this.dropX += this.dropVx + wind.get(this.dropX, this.dropY) * 8;
-      this.dropY += this.dropVy; return;
-    }
-    const target = growth > 0.38 ? 1 : (growth / 0.38);
-    this.scale += (target - this.scale) * 0.035;
-    if (season === 'Autumn' && this.state < 2 && growth > 0.8) {
-      this.stateTimer++;
-      if (this.stateTimer > rand(140, 450)) this.state = 2;
-    } else if (season === 'Winter') {
-      if (Math.random() < 0.012) this.state = 3;
-    } else if (season === 'Spring' && this.state === 2) {
-      if (Math.random() < 0.006) this.state = 1;
-    }
-  }
-  color(baseHue, baseSat, baseLight, season) {
-    if (this.state === 0) return hsl(baseHue + 10, baseSat - 10, baseLight - 5);
-    if (this.state === 1) return hsl(baseHue + this.hueOff, baseSat, baseLight + 8);
-    if (this.state === 2) {
-      const t = clamp((this.stateTimer - 140) / 320, 0, 1);
-      return hsl(lerp(baseHue + this.hueOff, rand(18, 42), t), lerp(baseSat, 78, t * 0.45), lerp(baseLight + 8, 46, t));
-    }
-    return 'rgba(0,0,0,0)';
-  }
-  draw(ctx, x, y, branchAngle, baseHue, baseSat, baseLight, season, zScale) {
-    if (this.scale < 0.01) return;
-    if (this.state === 3) {
-      ctx.save();
-      ctx.translate(this.dropX, this.dropY);
-      ctx.rotate(branchAngle + this.dropRot * 12);
-      ctx.scale(this.size * zScale * 0.75, this.size * zScale * 0.75);
-      leafPath(ctx); ctx.fillStyle = hsl(32, 52, 34, 0.8); ctx.fill();
-      ctx.restore(); return;
-    }
-    ctx.save(); ctx.translate(x, y); ctx.rotate(branchAngle + this.baseAngle);
-    const s = this.size * this.scale * zScale; ctx.scale(s, s);
-    ctx.fillStyle = this.color(baseHue, baseSat, baseLight, season);
-    leafPath(ctx); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.25;
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -5); ctx.stroke();
-    ctx.restore();
-  }
-}
-function leafPath(ctx) {
-  ctx.beginPath(); ctx.moveTo(0, 0);
-  ctx.bezierCurveTo(2, -2, 3, -5, 0, -9); ctx.bezierCurveTo(-3, -5, -2, -2, 0, 0); ctx.closePath();
-}
-
-class Flower {
-  constructor(size, hueOff) {
-    this.size = size; this.hueOff = hueOff; this.bloom = 0; this.wilt = 0;
-    this.state = 'bud'; this.petalCount = randInt(5, 9);
-  }
-  update(growth, season) {
-    const gm = sm.get('growth','growth');
-    if (season === 'Winter') { this.bloom = Math.max(0, this.bloom - 0.018); this.wilt = Math.min(1, this.wilt + 0.014); this.state = 'wilt'; return; }
-    if (growth > 0.86 && season !== 'Autumn') {
-      if (this.state === 'bud') this.state = 'bloom';
-      if (this.state === 'bloom') { this.bloom = Math.min(1, this.bloom + 0.007 * gm); this.wilt = Math.max(0, this.wilt - 0.008); }
-    } else { this.bloom = Math.max(0, this.bloom - 0.008); if (this.bloom <= 0.04) this.state = 'bud'; }
-    if (season === 'Autumn' && this.bloom > 0.45) this.wilt = Math.min(1, this.wilt + 0.006);
-  }
-  draw(ctx, x, y, branchAngle, hue, zScale) {
-    if (this.bloom < 0.01) {
-      if (this.state === 'bud') {
-        ctx.fillStyle = hsl(hue + 32, 58, 38);
-        ctx.beginPath(); ctx.arc(x, y, this.size * zScale * 0.5, 0, Math.PI * 2); ctx.fill();
-      } return;
-    }
-    const s = this.size * this.bloom * zScale, wiltAngle = this.wilt * 0.55, fh = hue + this.hueOff;
-    for (let i = 0; i < this.petalCount; i++) {
-      const ang = (i / this.petalCount) * Math.PI * 2 + branchAngle;
-      ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.rotate(wiltAngle);
-      const px = Math.sin(i * 2.2) * 1.3 * this.wilt; ctx.translate(px, -s * 0.55); ctx.scale(s * 0.48, s * 0.88);
-      ctx.fillStyle = hsl(fh, 78, 64 - this.wilt * 18);
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(1, -1, 1, -3, 0, -4); ctx.bezierCurveTo(-1, -3, -1, -1, 0, 0); ctx.fill();
-      ctx.restore();
-    }
-    ctx.fillStyle = hsl(fh + 42, 88, 74 - this.wilt * 26);
-    ctx.beginPath(); ctx.arc(x, y, s * 0.32, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,242,200,0.9)';
-    for (let i = 0; i < 5; i++) {
-      const a = i * 1.256 + branchAngle;
-      ctx.beginPath(); ctx.arc(x + Math.cos(a) * s * 0.14, y + Math.sin(a) * s * 0.14, s * 0.07, 0, Math.PI * 2); ctx.fill();
-    }
+function updateUI(){
+  document.getElementById('pcount').textContent=plants.length;
+  document.getElementById('mcount').textContent=memories.length;
+  document.getElementById('year-count').textContent=`Year ${Math.floor(sm.frame/(cfg.seasonFrames*4))+1}`;
+  document.getElementById('season-name').textContent=seasons[sm.idx].name;
+  if(sm.frame-lastHaikuFrame>420){
+    const living=plants.length,mem=memories.length,activeBees=bees.filter(b=>sm.get('bee','bee')>.05).length,dayT=(sm.frame%cfg.seasonFrames)/cfg.seasonFrames;
+    document.getElementById('haiku').innerHTML=generateHaiku(living,mem,activeBees,seasons[sm.idx].name,dayT);
+    lastHaikuFrame=sm.frame;
   }
 }
 
-class Branch {
-  constructor(parent, depth, baseAngle, maxLen, thickness, dna) {
-    this.parent = parent; this.depth = depth; this.baseAngle = baseAngle;
-    this.angle = baseAngle; this.angularVel = 0; this.maxLen = maxLen;
-    this.thickness = thickness; this.grown = 0; this.endX = 0; this.endY = 0;
-    this.children = [];
-    this.leaf = Math.random() > 0.38 ? new Leaf(rand(-0.55, 0.55), dna.leafSize * rand(0.85, 1.25)) : null;
-    this.flower = (Math.random() > 0.62 && depth > 2) ? new Flower(dna.flowerSize * rand(0.85, 1.15), rand(-18, 18)) : null;
-  }
-  update(growthRatio, x, y, parentGlobalAngle) {
-    const myGrowth = Math.pow(growthRatio, 1 + this.depth * 0.2), len = this.maxLen * myGrowth;
-    this.grown = myGrowth;
-    const wx = x + Math.cos(parentGlobalAngle + this.angle) * (len * 0.55), wy = y + Math.sin(parentGlobalAngle + this.angle) * (len * 0.55);
-    const wf = wind.get(wx, wy);
-    const torqueWind = wf * (1 + this.depth * 0.35) * 0.014;
-    const torqueGravity = -cfg.gravity * this.depth * 0.018;
-    const torqueSpring = (this.baseAngle - this.angle) * (0.055 - this.depth * 0.0025);
-    this.angularVel += torqueWind + torqueGravity + torqueSpring; this.angularVel *= 0.925; this.angle += this.angularVel;
-    const globalAngle = parentGlobalAngle + this.angle;
-    this.endX = x + Math.cos(globalAngle) * len; this.endY = y + Math.sin(globalAngle) * len;
-    this.rx = x; this.ry = y; this.rang = globalAngle; this.rlen = len;
-    for (const c of this.children) c.update(growthRatio, this.endX, this.endY, globalAngle);
-  }
-  draw(ctx, seasonHueShift, seasonSat, seasonLight, zScale, baseHue, baseSat, baseLight, season) {
-    if (this.grown < 0.01) return;
-    const len = this.rlen, ang = this.rang, w1 = this.thickness * zScale * this.grown, w2 = this.thickness * 0.62 * zScale * this.grown;
-    const perp = ang + Math.PI / 2;
-    const x0 = this.rx - Math.cos(perp) * w1 * 0.5, y0 = this.ry - Math.sin(perp) * w1 * 0.5;
-    const x1 = this.rx + Math.cos(perp) * w1 * 0.5, y1 = this.ry + Math.sin(perp) * w1 * 0.5;
-    const x2 = this.endX + Math.cos(perp) * w2 * 0.5, y2 = this.endY + Math.sin(perp) * w2 * 0.5;
-    const x3 = this.endX - Math.cos(perp) * w2 * 0.5, y3 = this.endY - Math.sin(perp) * w2 * 0.5;
-    const h = baseHue + (this.depth * -2.5) + seasonHueShift;
-    const s = clamp(baseSat + seasonSat - this.depth * 1.8, 0, 100);
-    const l = clamp(baseLight + seasonLight + this.depth * 2.8, 0, 95);
-    ctx.fillStyle = hsl(h, s, l);
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3); ctx.closePath(); ctx.fill();
-    if (this.leaf) this.leaf.draw(ctx, this.endX, this.endY, ang, baseHue, baseSat, baseLight, season, zScale);
-    if (this.flower) this.flower.draw(ctx, this.endX, this.endY, ang, baseHue + (this.leaf?.hueOff || 0), zScale);
-    for (const c of this.children) c.draw(ctx, seasonHueShift, seasonSat, seasonLight, zScale, baseHue, baseSat, baseLight, season);
-  }
+function tooltipFor(p){
+  const years=((sm.frame-p.birthFrame)/(cfg.seasonFrames*4)).toFixed(1);
+  const healthLabel=p.health>.7?'Thriving':p.health>.35?'Struggling':'Fading';
+  tooltip.querySelector('.t-name').textContent=p.name;
+  tooltip.querySelector('.t-meta').textContent=`${years} years · ${healthLabel}${p.firstBloom?' · Bloomed':''}`;
+  tooltip.style.left=Math.min(mouse.x+16,W-220)+'px';
+  tooltip.style.top=Math.max(mouse.y-40,10)+'px';
+  tooltip.style.opacity=1;
 }
 
-/* ---------------------------------------------------------------
-   Plant
-   --------------------------------------------------------------- */
-class Plant {
-  constructor(x, z, dna = null) {
-    this.x = x; this.z = z; this.y = terrainHeight(x);
-    this.dna = dna || new DNA();
-    this.name = generateName();
-    this.birthFrame = sm.frame;
-    this.age = 0; this.maturity = rand(550, 950); this.dead = false; this.health = 1;
-    this.tended = 0; this.firstBloom = false; this.root = null;
-    this.build();
-  }
-  build() {
-    const add = (parent, depth, angle) => {
-      const len = this.dna.segLen * Math.pow(0.76, depth) * rand(0.88, 1.15);
-      const thick = this.dna.thickness * Math.pow(0.7, depth);
-      const b = new Branch(parent, depth, angle, len, thick, this.dna);
-      if (parent) parent.children.push(b); else this.root = b;
-      if (depth < this.dna.maxDepth) {
-        const count = Math.random() > 0.82 ? 3 : 2;
-        for (let i = 0; i < count; i++) {
-          const spread = (i - (count - 1) / 2) * this.dna.branchAngle;
-          add(b, depth + 1, angle + spread + rand(-0.09, 0.09) + this.dna.tropism * depth);
-        }
-      }
-    };
-    add(null, 0, -Math.PI / 2 + rand(-0.07, 0.07));
-  }
-  update(season, cursorDist) {
-    const gm = sm.get('growth','growth');
-    // Tending accelerates growth and heals
-    if (cursorDist < 80) { this.tended += 1; this.health = Math.min(1, this.health + 0.003); }
-    const tendBonus = 1 + Math.min(this.tended / 300, 0.25);
-    if (gm > 0 && this.age < this.maturity) this.age += this.dna.growthRate * gm * tendBonus;
-    const ratio = Math.min(1, this.age / this.maturity);
-    this.root.update(ratio, this.x, this.y, 0);
-
-    // First bloom ceremony
-    if (!this.firstBloom && this.root) {
-      let hasOpen = false;
-      this.visit(b => { if (b.flower && b.flower.state === 'bloom' && b.flower.bloom > 0.6) hasOpen = true; });
-      if (hasOpen) {
-        this.firstBloom = true;
-        for (let i = 0; i < 14; i++) weather.addParticle(this.x, this.y - 20, 'pollen', this.dna.flowerHue);
-      }
-    }
-
-    if (season === 'Winter') this.health -= 0.00022;
-    else if (season === 'Spring') this.health = Math.min(1, this.health + 0.00035);
-    if (this.health <= 0) this.dead = true;
-  }
-  visit(fn) {
-    const stack = [this.root];
-    while (stack.length) { const b = stack.pop(); fn(b); for (const c of b.children) stack.push(c); }
-  }
-  draw(ctx, season) {
-    const zScale = 0.7 + this.z * 0.3;
-    const fog = 1 - this.z * 0.32;
-    const seasonHueShift = season === 'Autumn' ? -42 : (season === 'Winter' ? 155 : 0);
-    const seasonSat = season === 'Winter' ? -32 : (season === 'Autumn' ? 12 : 0);
-    const seasonLight = season === 'Winter' ? 16 : (season === 'Autumn' ? 7 : 0);
-
-    const dayT = (sm.frame % cfg.seasonFrames) / cfg.seasonFrames;
-    const sunAngle = (dayT - 0.5) * 0.55;
-    const shadowLen = (26 + this.dna.maxDepth * 5) * zScale;
-    const sx = this.x + Math.sin(sunAngle) * shadowLen;
-    const sy = this.y + 2;
-    ctx.fillStyle = `rgba(8,12,10,${0.14 * this.z + 0.04})`;
-    ctx.beginPath(); ctx.ellipse(sx, sy, (11 + this.dna.maxDepth * 3.5) * zScale, 3.2 * zScale, sunAngle * 0.25, 0, Math.PI * 2); ctx.fill();
-
-    ctx.save();
-    this.root.draw(ctx, seasonHueShift, seasonSat + (1 - fog) * -18, seasonLight + (1 - fog) * -9, zScale, this.dna.hue, this.dna.sat, this.dna.light, season);
-    ctx.restore();
-  }
-  // Draw skeleton for winter dead
-  drawSkeleton(ctx) {
-    const zScale = 0.7 + this.z * 0.3;
-    const drawBone = (b, x, y, pa) => {
-      if (b.grown < 0.01) return;
-      const len = b.rlen * 0.85, ang = b.rang;
-      const ex = x + Math.cos(ang) * len, ey = y + Math.sin(ang) * len;
-      ctx.strokeStyle = `rgba(220,225,230,${0.12 + this.z * 0.08})`;
-      ctx.lineWidth = Math.max(0.4, b.thickness * zScale * b.grown * 0.35);
-      ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
-      for (const c of b.children) drawBone(c, ex, ey, ang);
-    };
-    drawBone(this.root, this.x, this.y, 0);
-  }
-}
-
-
-/* ---------------------------------------------------------------
-   Bee
-   --------------------------------------------------------------- */
-class Bee {
-  constructor() {
-    this.x = rand(0, W); this.y = rand(terrainHeight(this.x) - 240, terrainHeight(this.x) - 35);
-    this.vx = rand(-2, 2); this.vy = rand(-1, 1); this.maxSpeed = rand(2.4, 4.2);
-    this.target = null; this.carrying = false; this.idle = 0; this.size = rand(2.2, 3.4); this.hoverPhase = rand(0, Math.PI * 2);
-  }
-  update() {
-    const activity = sm.get('bee','bee');
-    if (activity < 0.05) { this.x += this.vx * 0.05; this.y += this.vy * 0.05; if (this.y < -30) this.y = -30; return; }
-    this.hoverPhase += 0.14;
-    this.vx += rand(-0.22, 0.22) + Math.sin(this.hoverPhase) * 0.35;
-    this.vy += rand(-0.22, 0.22) + Math.cos(this.hoverPhase * 2) * 0.18;
-    if (!this.target || Math.random() < 0.007) this.pickTarget();
-    if (this.target) {
-      const dx = this.target.endX - this.x, dy = this.target.endY - this.y, d = Math.hypot(dx, dy);
-      if (d < 8) {
-        const plant = findPlant(this.target);
-        if (plant) {
-          if (!this.carrying && this.target.flower && this.target.flower.bloom > 0.5) {
-            this.carrying = true;
-            for (let i = 0; i < 4; i++) weather.addParticle(this.x, this.y, 'pollen', plant.dna.flowerHue);
-          } else if (this.carrying && plants.length < cfg.maxPlants && Math.random() < 0.1) {
-            const sx = clamp(plant.x + rand(-100, 100), 30, W - 30);
-            const sz = clamp(plant.z + rand(-0.25, 0.25), 0, 1);
-            plants.push(new Plant(sx, sz, DNA.cross(plant.dna, plant.dna)));
-            this.carrying = false;
-          }
-        }
-        this.target = null; this.idle = rand(20, 70);
-      } else { this.vx += (dx / d) * 0.11; this.vy += (dy / d) * 0.11; }
-    }
-    if (this.x < 0) this.vx += 0.16; if (this.x > W) this.vx -= 0.16;
-    const gy = terrainHeight(this.x);
-    if (this.y < gy - 300) this.vy += 0.16; if (this.y > gy - 12) this.vy -= 0.16;
-    const limit = this.idle > 0 ? this.maxSpeed * 0.32 : this.maxSpeed * activity;
-    const sp = Math.hypot(this.vx, this.vy);
-    if (sp > limit) { this.vx = (this.vx / sp) * limit; this.vy = (this.vy / sp) * limit; }
-    this.x += this.vx; this.y += this.vy; if (this.idle > 0) this.idle--;
-  }
-  pickTarget() {
-    const candidates = [];
-    for (const p of plants) {
-      p.visit(b => { if (b.flower && b.flower.bloom > 0.25 && b.flower.state !== 'wilt') { const d = dist(this.x, this.y, b.endX, b.endY); if (d < 280) candidates.push({ b, d }); } });
-    }
-    if (candidates.length) {
-      candidates.sort((a, b) => a.d - b.d);
-      this.target = candidates[randInt(0, Math.min(3, candidates.length - 1))].b;
-    }
-  }
-  draw(ctx) {
-    if (sm.get('bee','bee') < 0.05) return;
-    const ang = Math.atan2(this.vy, this.vx);
-    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(ang);
-    ctx.fillStyle = '#f2c12e';
-    ctx.beginPath(); ctx.ellipse(0, 0, this.size * 2.1, this.size, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#1a1a1a';
-    for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.arc(i * this.size * 0.85, 0, this.size * 0.52, 0, Math.PI * 2); ctx.fill(); }
-    if (this.carrying) {
-      ctx.fillStyle = '#d4a017';
-      ctx.beginPath(); ctx.ellipse(-this.size, this.size * 0.55, this.size * 0.55, this.size * 0.32, 0.4, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(-this.size, -this.size * 0.55, this.size * 0.55, this.size * 0.32, -0.4, 0, Math.PI * 2); ctx.fill();
-    }
-    const wf = 0.08, wa = 4.5, t = Date.now() * wf;
-    for (let k = 0; k < 3; k++) {
-      const phase = (t - k * 0.7) % (Math.PI * 2), wy = Math.sin(phase) * wa * 0.55;
-      ctx.fillStyle = `rgba(255,255,255,${0.32 - k * 0.09})`;
-      ctx.beginPath(); ctx.ellipse(0, -this.size - 2 + wy, this.size * 1.5, this.size * 0.45, 0.22, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(0, this.size + 2 - wy, this.size * 1.5, this.size * 0.45, -0.22, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.restore();
-  }
-}
-function findPlant(branch) { for (const p of plants) { let f = false; p.visit(b => { if (b === branch) f = true; }); if (f) return p; } return null; }
-
-/* ---------------------------------------------------------------
-   Firefly
-   --------------------------------------------------------------- */
-class Firefly {
-  constructor() {
-    this.x = rand(0, W); this.y = rand(terrainHeight(this.x) - 220, terrainHeight(this.x) - 20);
-    this.vx = rand(-0.6, 0.6); this.vy = rand(-0.4, 0.4);
-    this.phase = rand(0, Math.PI * 2); this.size = rand(1.2, 2.4);
-    this.target = null;
-  }
-  update() {
-    const season = seasons[sm.idx].name;
-    const dayT = (sm.frame % cfg.seasonFrames) / cfg.seasonFrames;
-    const active = (season === 'Summer' && dayT > 0.55) || (season === 'Spring' && dayT > 0.65);
-    if (!active) { this.y = -50; return; }
-
-    // Attracted to cursor and blooming flowers
-    const flowerTargets = [];
-    for (const p of plants) {
-      p.visit(b => { if (b.flower && b.flower.bloom > 0.4) flowerTargets.push({ x: b.endX, y: b.endY }); });
-    }
-    let tx = mouse.x, ty = mouse.y, weight = 0.25;
-    if (flowerTargets.length && Math.random() < 0.3) {
-      const t = flowerTargets[randInt(0, flowerTargets.length - 1)];
-      tx = t.x; ty = t.y; weight = 0.18;
-    }
-    this.vx += (tx - this.x) * 0.0008 * weight + rand(-0.08, 0.08);
-    this.vy += (ty - this.y) * 0.0008 * weight + rand(-0.08, 0.08);
-    const sp = Math.hypot(this.vx, this.vy);
-    if (sp > 1.6) { this.vx = (this.vx / sp) * 1.6; this.vy = (this.vy / sp) * 1.6; }
-    this.x += this.vx; this.y += this.vy;
-    this.phase += 0.12;
-  }
-  draw(ctx) {
-    const season = seasons[sm.idx].name;
-    const dayT = (sm.frame % cfg.seasonFrames) / cfg.seasonFrames;
-    if (!(season === 'Summer' && dayT > 0.55) && !(season === 'Spring' && dayT > 0.65)) return;
-    const glow = 0.5 + Math.sin(this.phase) * 0.5;
-    ctx.fillStyle = `rgba(200,255,140,${glow})`;
-    ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
-    const rg = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 5);
-    rg.addColorStop(0, `rgba(200,255,140,${glow * 0.35})`);
-    rg.addColorStop(1, 'rgba(200,255,140,0)');
-    ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(this.x, this.y, this.size * 5, 0, Math.PI * 2); ctx.fill();
-  }
-}
-
-/* ---------------------------------------------------------------
-   Memory Stones
-   --------------------------------------------------------------- */
-class Memory {
-  constructor(x, z, y, name, frame) {
-    this.x = x; this.z = z; this.y = y; this.name = name; this.deathFrame = frame;
-    this.moss = 0; // grows over time
-  }
-  draw(ctx, season) {
-    const zScale = 0.7 + this.z * 0.3;
-    this.moss = Math.min(1, this.moss + 0.002);
-    const age = (sm.frame - this.deathFrame) / 1200;
-    const alpha = clamp(0.55 + this.z * 0.25 - age * 0.15, 0.15, 0.85);
-    const w = 16 * zScale, h = 8 * zScale;
-    // Stone
-    ctx.fillStyle = `rgba(145,150,155,${alpha})`;
-    ctx.beginPath(); ctx.ellipse(this.x, this.y - h * 0.3, w, h, 0, 0, Math.PI * 2); ctx.fill();
-    // Moss
-    if (season !== 'Winter') {
-      ctx.fillStyle = `rgba(90,120,70,${alpha * 0.6 * this.moss})`;
-      ctx.beginPath(); ctx.ellipse(this.x - w * 0.3, this.y - h * 0.5, w * 0.45, h * 0.55, -0.2, 0, Math.PI * 2); ctx.fill();
-    }
-    // Snow cap in winter
-    if (season === 'Winter') {
-      ctx.fillStyle = `rgba(255,255,255,${alpha * 0.7})`;
-      ctx.beginPath(); ctx.ellipse(this.x, this.y - h * 0.6, w * 0.6, h * 0.35, 0, 0, Math.PI * 2); ctx.fill();
-    }
-    // Name (faded)
-    ctx.fillStyle = `rgba(40,45,50,${alpha * 0.55})`;
-    ctx.font = `${Math.max(6, 8 * zScale)}px Georgia`;
-    ctx.textAlign = 'center';
-    ctx.fillText(this.name, this.x, this.y - h * 0.15);
-  }
-}
-
-/* ---------------------------------------------------------------
-   Weather
-   --------------------------------------------------------------- */
-const weather = {
-  particles: [], raining: false, rainAngle: 0,
-  update() {
-    const season = seasons[sm.idx].name;
-    const chance = sm.get('rainChance','rainChance');
-    this.raining = (season !== 'Winter' && season !== 'Autumn') ? (Math.random() < chance * 0.045) : false;
-    if (season === 'Winter' && Math.random() < 0.22) this.addParticle(rand(0, W), -5, 'snow');
-    if (this.raining) {
-      this.rainAngle = wind.get(W * 0.5, groundY * 0.5) * 0.45;
-      for (let i = 0; i < Math.floor(chance * 5.5); i++) this.addParticle(rand(0, W), rand(-10, groundY - 40), 'rain');
-    }
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
-      p.x += p.vx + wind.get(p.x, p.y) * (p.type === 'snow' ? 2.8 : 1);
-      p.y += p.vy; p.life--;
-      if (p.life <= 0 || p.y > H) this.particles.splice(i, 1);
-    }
-  },
-  addParticle(x, y, type, hue = 0) {
-    if (type === 'rain') this.particles.push({ x, y, vx: this.rainAngle + rand(-0.4, 0.4), vy: rand(11, 17), life: rand(10, 18), type, hue });
-    else if (type === 'snow') this.particles.push({ x, y, vx: rand(-0.9, 0.9), vy: rand(0.9, 2.6), life: rand(130, 280), type, hue });
-    else if (type === 'pollen') this.particles.push({ x, y, vx: rand(-1.1, 1.1), vy: rand(-0.6, 1.3), life: rand(35, 110), type, hue });
-  },
-  draw(ctx) {
-    for (const p of this.particles) {
-      if (p.type === 'rain') {
-        ctx.strokeStyle = 'rgba(205,218,235,0.32)'; ctx.lineWidth = 1.1;
-        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 1.4, p.y - p.vy * 1.1); ctx.stroke();
-      } else if (p.type === 'snow') {
-        ctx.fillStyle = `rgba(255,255,255,${p.life / 180})`;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, Math.PI * 2); ctx.fill();
-      } else if (p.type === 'pollen') {
-        ctx.fillStyle = hsl(p.hue, 82, 68, p.life / 80);
-        ctx.beginPath(); ctx.arc(p.x, p.y, 1.4, 0, Math.PI * 2); ctx.fill();
-      }
-    }
-  }
-};
-
-
-/* ---------------------------------------------------------------
-   Mycelium Network
-   --------------------------------------------------------------- */
-const mycelium = {
-  lines: [], lastUpdate: 0,
-  update() {
-    if (sm.frame - this.lastUpdate < 40) return;
-    this.lastUpdate = sm.frame;
-    this.lines.length = 0;
-    const season = seasons[sm.idx].name;
-    const night = 1 - Math.sin((sm.frame % cfg.seasonFrames) / cfg.seasonFrames * Math.PI) * 1.2;
-    if (night <= 0 || season === 'Winter') return;
-    for (let i = 0; i < plants.length; i++) {
-      for (let j = i + 1; j < plants.length; j++) {
-        const a = plants[i], b = plants[j];
-        const d = Math.hypot(a.x - b.x, a.y - b.y);
-        if (d < 90 && a.z > 0.3 && b.z > 0.3) {
-          const health = (a.health + b.health) * 0.5;
-          const alpha = clamp(night * health * 0.35, 0, 0.55) * (1 - d / 90);
-          this.lines.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, alpha, pulse: rand(0, Math.PI * 2) });
-        }
-      }
-    }
-  },
-  draw(ctx) {
-    const season = seasons[sm.idx].name;
-    if (season === 'Winter') return;
-    const t = Date.now() * 0.002;
-    for (const ln of this.lines) {
-      const glow = 0.6 + Math.sin(t + ln.pulse) * 0.4;
-      ctx.strokeStyle = `rgba(160,220,180,${ln.alpha * glow})`;
-      ctx.lineWidth = 0.8;
-      ctx.beginPath(); ctx.moveTo(ln.x1, ln.y1); ctx.lineTo(ln.x2, ln.y2); ctx.stroke();
-    }
-  }
-};
-
-/* ---------------------------------------------------------------
-   Main Loop & Interaction
-   --------------------------------------------------------------- */
-const plants = [], bees = [], fireflies = [], memories = [];
-const mouse = { x: 0, y: 0, down: false, windBoost: 0 };
-for (let i = 0; i < cfg.maxFireflies; i++) fireflies.push(new Firefly());
-
-function spawnPlants() {
-  plants.length = 0;
-  const count = Math.min(cfg.maxPlants, Math.floor(W / 24));
-  for (let i = 0; i < count; i++) {
-    const z = rand(0, 1);
-    const p = new Plant(rand(30, W - 30), z);
-    p.age = rand(0, p.maturity);
-    plants.push(p);
-  }
-  plants.sort((a, b) => a.z - b.z);
-}
-function spawnBees() { bees.length = 0; for (let i = 0; i < cfg.maxBees; i++) bees.push(new Bee()); }
-
-const tooltip = document.getElementById('tooltip');
-let hoveredPlant = null, lastHaikuFrame = -999, currentHaiku = '';
-
-function updateUI() {
-  document.getElementById('pcount').textContent = plants.length;
-  document.getElementById('mcount').textContent = memories.length;
-  document.getElementById('year').textContent = Math.floor(sm.frame / (cfg.seasonFrames * 4)) + 1;
-  const badge = document.getElementById('season');
-  badge.textContent = seasons[sm.idx].name;
-  badge.style.background = `hsla(${seasons[sm.idx].skyTop[0]},${seasons[sm.idx].skyTop[1]*0.48}%,${seasons[sm.idx].skyTop[2]*0.78}%,0.35)`;
-
-  if (sm.frame - lastHaikuFrame > 420) {
-    const living = plants.length, mem = memories.length;
-    const activeBees = bees.filter(b => sm.get('bee','bee') > 0.05).length;
-    const dayT = (sm.frame % cfg.seasonFrames) / cfg.seasonFrames;
-    currentHaiku = generateHaiku(living, mem, activeBees, seasons[sm.idx].name, dayT);
-    document.getElementById('haiku').innerHTML = currentHaiku;
-    lastHaikuFrame = sm.frame;
-  }
-}
-
-function tooltipFor(p, d) {
-  const years = ((sm.frame - p.birthFrame) / (cfg.seasonFrames * 4)).toFixed(1);
-  const status = p.firstBloom ? (p.tended > 60 ? 'Beloved • First bloom celebrated' : 'First bloom celebrated') : 'Still growing';
-  const healthBar = p.health > 0.7 ? 'Thriving' : p.health > 0.35 ? 'Struggling' : 'Fading';
-  tooltip.innerHTML = `<div class="name">${p.name}</div><div class="meta">Age: ${years} years<br>${healthBar}<br>${status}</div>`;
-  tooltip.style.left = Math.min(mouse.x + 16, W - 240) + 'px';
-  tooltip.style.top = Math.max(mouse.y - 40, 10) + 'px';
-  tooltip.style.opacity = 1;
-}
-
-// Input
-canvas.addEventListener('pointermove', e => {
-  const rect = canvas.getBoundingClientRect();
-  const prevX = mouse.x, prevY = mouse.y;
-  mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top;
-  if (mouse.down) mouse.windBoost = clamp(mouse.windBoost + Math.hypot(mouse.x - prevX, mouse.y - prevY) * 0.0018, 0, 1.4);
-
-  // Hover detection
-  let best = null, bestD = Infinity;
-  for (const p of plants) {
-    const d = Math.hypot(p.x - mouse.x, p.y - mouse.y);
-    if (d < 50 && d < bestD) { bestD = d; best = p; }
-  }
-  hoveredPlant = best;
-  if (hoveredPlant) tooltipFor(hoveredPlant, bestD); else tooltip.style.opacity = 0;
+canvas.addEventListener('pointermove',e=>{
+  const rect=canvas.getBoundingClientRect(),prevX=mouse.x,prevY=mouse.y;
+  mouse.x=e.clientX-rect.left;mouse.y=e.clientY-rect.top;
+  if(mouse.down)mouse.windBoost=clamp(mouse.windBoost+Math.hypot(mouse.x-prevX,mouse.y-prevY)*.0018,0,1.4);
+  let best=null,bestD=Infinity;
+  for(const p of plants){const d=Math.hypot(p.x-mouse.x,p.y-mouse.y);if(d<50&&d<bestD){bestD=d;best=p}}
+  hoveredPlant=best;
+  if(hoveredPlant)tooltipFor(hoveredPlant);else tooltip.style.opacity=0;
 });
-canvas.addEventListener('pointerdown', e => {
-  mouse.down = true; if (!audio.ctx) audio.init();
-});
-window.addEventListener('pointerup', () => { mouse.down = false; });
-
-canvas.addEventListener('click', e => {
-  if (plants.length < cfg.maxPlants && mouse.y > terrainHeight(mouse.x) - 30) {
-    const z = clamp(rand(0, 1), 0, 1);
-    const baby = new Plant(mouse.x, z);
-    let parent = null, best = Infinity;
-    for (const p of plants) { const d = Math.abs(p.x - mouse.x); if (d < best) { best = d; parent = p; } }
-    if (parent) baby.dna = new DNA(parent.dna);
-    plants.push(baby); plants.sort((a, b) => a.z - b.z);
-    for (let i = 0; i < 10; i++) weather.addParticle(mouse.x, terrainHeight(mouse.x), 'pollen', baby.dna.flowerHue);
+canvas.addEventListener('pointerdown',()=>{mouse.down=true});
+window.addEventListener('pointerup',()=>{mouse.down=false});
+canvas.addEventListener('click',e=>{
+  if(plants.length<cfg.maxPlants&&mouse.y>terrainHeight(mouse.x)-30){
+    const z=clamp(rand(0,1),0,1),baby=new Plant(mouse.x,z);
+    let parent=null,best=Infinity;
+    for(const p of plants){const d=Math.abs(p.x-mouse.x);if(d<best){best=d;parent=p}}
+    if(parent)baby.dna=new DNA(parent.dna);
+    plants.push(baby);plants.sort((a,b)=>a.z-b.z);
+    for(let i=0;i<10;i++)weather.addParticle(mouse.x,terrainHeight(mouse.x),'pollen',baby.dna.flowerHue);
   }
 });
 
-document.getElementById('mute').addEventListener('click', () => audio.toggle());
+document.getElementById('sound-btn').addEventListener('click',()=>audio.toggle());
 
-function loop() {
-  sm.update(); wind.update(); audio.update(); weather.update(); mycelium.update();
+// Entry flow
+let entered=false;
+function enter(){
+  if(entered)return;entered=true;
+  audio.init();audio.toggle();
+  const entry=document.getElementById('entry');
+  entry.classList.add('fade');
+  setTimeout(()=>{entry.style.display='none'},2000);
+  document.getElementById('ui').classList.add('visible');
+  document.getElementById('sound-btn').classList.add('show');
+  setTimeout(()=>document.getElementById('hint').classList.add('fade-out'),6000);
+}
+document.getElementById('entry').addEventListener('click',enter);
+document.getElementById('entry-btn').addEventListener('click',e=>{e.stopPropagation();enter()});
 
-  ctx.clearRect(0, 0, W, H);
-  drawSky(); drawCelestial(); drawTerrain();
-
-  const season = seasons[sm.idx].name;
-
-  // Cursor light
-  const cursorGlow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 90);
-  cursorGlow.addColorStop(0, 'rgba(255,250,220,0.06)');
-  cursorGlow.addColorStop(1, 'rgba(255,250,220,0)');
-  ctx.fillStyle = cursorGlow; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 90, 0, Math.PI * 2); ctx.fill();
-
-  // Memories behind plants
-  for (const m of memories) m.draw(ctx, season);
-
-  // Auto regeneration
-  if (plants.length < cfg.maxPlants * 0.5 && season !== 'Winter' && Math.random() < 0.012) {
-    const x = rand(30, W - 30), z = rand(0, 1);
-    let parent = null, best = Infinity;
-    for (const p of plants) { const d = Math.abs(p.x - x); if (d < best) { best = d; parent = p; } }
-    plants.push(new Plant(x, z, parent ? new DNA(parent.dna) : null));
-    plants.sort((a, b) => a.z - b.z);
+function loop(){
+  sm.update();wind.update();audio.update();weather.update();mycelium.update();
+  ctx.clearRect(0,0,W,H);
+  drawSky();drawCelestial();drawTerrain();
+  const season=seasons[sm.idx].name;
+  const cursorGlow=ctx.createRadialGradient(mouse.x,mouse.y,0,mouse.x,mouse.y,90);
+  cursorGlow.addColorStop(0,'rgba(255,250,220,0.06)');cursorGlow.addColorStop(1,'rgba(255,250,220,0)');
+  ctx.fillStyle=cursorGlow;ctx.beginPath();ctx.arc(mouse.x,mouse.y,90,0,Math.PI*2);ctx.fill();
+  for(const m of memories)m.draw(ctx,season);
+  if(plants.length<cfg.maxPlants*.5&&season!=='Winter'&&Math.random()<.012){
+    const x=rand(30,W-30),z=rand(0,1);let parent=null,best=Infinity;
+    for(const p of plants){const d=Math.abs(p.x-x);if(d<best){best=d;parent=p}}
+    plants.push(new Plant(x,z,parent?new DNA(parent.dna):null));plants.sort((a,b)=>a.z-b.z);
   }
-
-  // Plants and winter skeletons
-  const deadSkeletons = [];
-  for (let i = 0; i < plants.length; i++) {
-    const p = plants[i];
-    const d = Math.hypot(p.x - mouse.x, p.y - mouse.y);
-    p.update(season, d);
-    if (p.dead) {
-      if (season === 'Winter') deadSkeletons.push(p);
-      else {
-        memories.push(new Memory(p.x, p.z, p.y, p.name, sm.frame));
-        if (memories.length > cfg.maxMemories) memories.shift();
-      }
-      plants.splice(i, 1); i--;
-    } else {
-      p.draw(ctx, season);
-    }
+  const deadSkeletons=[];
+  for(let i=0;i<plants.length;i++){
+    const p=plants[i],d=Math.hypot(p.x-mouse.x,p.y-mouse.y);
+    p.update(season,d);
+    if(p.dead){if(season==='Winter')deadSkeletons.push(p);else{memories.push(new Memory(p.x,p.z,p.y,p.name,sm.frame));if(memories.length>cfg.maxMemories)memories.shift()}plants.splice(i,1);i--}
+    else p.draw(ctx,season);
   }
-  for (const s of deadSkeletons) s.drawSkeleton(ctx);
-
-  // Mycelium
-  mycelium.draw(ctx);
-
-  // Weather
-  weather.draw(ctx);
-
-  // Bees & Fireflies
-  for (const b of bees) { b.update(); b.draw(ctx); }
-  for (const f of fireflies) { f.update(); f.draw(ctx); }
-
-  mouse.windBoost *= 0.96;
-  updateUI();
+  for(const s of deadSkeletons)s.drawSkeleton(ctx);
+  mycelium.draw(ctx);weather.draw(ctx);
+  for(const b of bees){b.update();b.draw(ctx)}
+  for(const f of fireflies){f.update();f.draw(ctx)}
+  mouse.windBoost*=.96;
+  if(entered)updateUI();
   requestAnimationFrame(loop);
 }
 
-resize();
-spawnPlants();
-spawnBees();
-loop();
+resize();spawnPlants();spawnBees();loop();
 </script>
 </body>
 </html>
