@@ -54,7 +54,7 @@ let ambientWind = 0; // slow ambient breathing wind
 
 // ── REEDS ──
 const reeds = [];
-const REED_COUNT = 120;
+const REED_COUNT = 80;
 
 class Reed {
   constructor(x, z) {
@@ -125,12 +125,10 @@ class Reed {
     ctx.save();
     ctx.translate(this.x, this.baseY);
 
-    // Draw stalk segment by segment with bezier curve
     const totalSway = this.sway * this.height;
     ctx.beginPath();
     ctx.moveTo(0, 0);
 
-    // Control points for natural reed curve
     const cp1x = totalSway * 0.2;
     const cp1y = -this.height * 0.4;
     const cp2x = totalSway * 0.65;
@@ -140,18 +138,8 @@ class Reed {
 
     ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY);
 
-    // Stalk gradient — backlit at dusk
-    const stalkGrad = ctx.createLinearGradient(
-      -this.thickness, 0, this.thickness * 2, -this.height
-    );
-
-    // Backlit: bright edge toward light source, dark body
-    stalkGrad.addColorStop(0, `hsla(${h},${s}%,${l*0.6}%,${0.9 - fog})`);
-    stalkGrad.addColorStop(0.3, `hsla(${h+8},${s+10}%,${l+15}%,${0.95 - fog})`);
-    stalkGrad.addColorStop(0.7, `hsla(${h},${s}%,${l}%,${0.85 - fog})`);
-    stalkGrad.addColorStop(1, `hsla(${h-5},${s-8}%,${l+8}%,${0.9 - fog})`);
-
-    ctx.strokeStyle = stalkGrad;
+    // Use solid color instead of gradient per frame (perf)
+    ctx.strokeStyle = `hsla(${h},${s}%,${l}%,${0.88 - fog})`;
     ctx.lineWidth = this.thickness;
     ctx.lineCap = 'round';
     ctx.stroke();
@@ -186,23 +174,10 @@ class Reed {
         this.sway * 0.3, 0, Math.PI * 2
       );
 
-      const headGrad = ctx.createLinearGradient(
-        headX - hw, headY - hh,
-        headX + hw * 1.5, headY
-      );
-      headGrad.addColorStop(0, `hsla(22,52%,24%,${0.92 - fog})`);
-      headGrad.addColorStop(0.4, `hsla(28,58%,32%,${0.95 - fog})`);
-      headGrad.addColorStop(1, `hsla(32,48%,22%,${0.85 - fog})`);
-      ctx.fillStyle = headGrad;
+      ctx.fillStyle = `hsla(26,52%,26%,${0.9 - fog})`;
       ctx.fill();
 
-      // Rim on head
-      if(timeOfDay.rimLight > 0.3) {
-        ctx.beginPath();
-        ctx.ellipse(headX + hw * 0.5, headY - hh * 0.5, hw * 0.2 * zScale, hh * 0.48, this.sway * 0.3, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(42,80%,62%,${timeOfDay.rimLight * 0.35})`;
-        ctx.fill();
-      }
+
     }
 
     ctx.restore();
@@ -477,13 +452,9 @@ function drawHorizonGlow(tod) {
   if(tod.rimLight < 0.1) return;
   const sunX = W * 0.72;
   const sunY = H * 0.62;
-  const g = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, H * 0.55);
-  g.addColorStop(0, `rgba(255,200,100,${tod.rimLight * 0.35})`);
-  g.addColorStop(0.3, `rgba(255,140,60,${tod.rimLight * 0.18})`);
-  g.addColorStop(0.7, `rgba(200,80,40,${tod.rimLight * 0.06})`);
-  g.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
+  // Simplified glow (perf - no radial gradient per frame)
+  ctx.fillStyle = `rgba(255,180,80,${tod.rimLight * 0.08})`;
+  ctx.fillRect(W*0.5, H*0.4, W*0.5, H*0.4);
 }
 
 // ── DRAW GROUND ──
@@ -535,7 +506,7 @@ function drawGroundReflection(tod) {
 // ── MYCELIUM ──
 function updateMycelium() {
   myceliumTimer++;
-  if(myceliumTimer % 90 !== 0) return;
+  if(myceliumTimer % 180 !== 0) return;
   myceliumLines.length = 0;
 
   // Connect nearby reeds with faint threads — only at night/dusk
@@ -623,16 +594,7 @@ function render() {
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, W, H);
 
-  // Film grain
-  if(frame % 3 === 0) {
-    for(let i = 0; i < 800; i++) {
-      const gx = Math.random() * W;
-      const gy = Math.random() * H;
-      const ga = Math.random() * 0.028;
-      ctx.fillStyle = `rgba(255,255,255,${ga})`;
-      ctx.fillRect(gx, gy, 1, 1);
-    }
-  }
+  // Film grain removed for performance
 
   // Wind decay
   windForce *= 0.95;
@@ -653,7 +615,7 @@ function render() {
     rainDuration = 200 + Math.random() * 400;
     rainTimer = 0;
     rainAngle = 0.1 + Math.random() * 0.15;
-    while(rainDrops.length < 180) rainDrops.push(new RainDrop());
+    while(rainDrops.length < 80) rainDrops.push(new RainDrop());
   }
   if(isRaining && rainTimer > rainDuration) {
     isRaining = false;
