@@ -3,320 +3,716 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Garden of Returning — Jeffrey Nicholas Tse</title>
-<meta name="description" content="A living browser sanctuary where plants grow, bloom, die, and return. Procedural audio, generative poetry, and seasonal cycles.">
+<title>Garden of Returning — Jeffrey N. Tse</title>
+<meta name="description" content="A field at dusk. Move through it.">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Space+Mono:ital@0;1&display=swap');
-  * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:100%; height:100%; overflow:hidden; background:#080a10; }
-  canvas { display:block; }
-
-  /* ENTRY SCREEN */
-  #entry {
-    position:fixed; inset:0; z-index:200;
-    background:#080a10;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    transition:opacity 1.8s ease; cursor:pointer;
-  }
-  #entry.fade { opacity:0; pointer-events:none; }
-  #entry-title {
-    font-family:'IM Fell English',serif; font-size:clamp(1.8rem,4vw,3rem);
-    color:rgba(230,220,190,0.88); letter-spacing:.08em; margin-bottom:.75rem;
-    text-align:center; font-weight:400;
-  }
-  #entry-subtitle {
-    font-family:'Space Mono',monospace; font-size:.7rem;
-    color:rgba(154,168,130,0.5); letter-spacing:.22em; text-transform:uppercase;
-    margin-bottom:3rem; text-align:center;
-  }
-  #entry-btn {
-    font-family:'Space Mono',monospace; font-size:.65rem;
-    color:rgba(200,190,155,0.55); letter-spacing:.28em; text-transform:uppercase;
-    border:1px solid rgba(200,190,155,0.2); padding:14px 36px;
-    background:transparent; cursor:pointer; transition:all .4s;
-  }
-  #entry-btn:hover { color:rgba(230,220,190,0.9); border-color:rgba(230,220,190,0.45); background:rgba(230,220,190,0.04); }
-  #entry-note {
-    position:absolute; bottom:2rem; left:0; right:0; text-align:center;
-    font-family:'Space Mono',monospace; font-size:.6rem;
-    color:rgba(154,168,130,0.3); letter-spacing:.15em; text-transform:uppercase;
-  }
-
-  /* UI OVERLAY */
-  #ui {
-    position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none;
-    display:flex; flex-direction:column; justify-content:space-between; padding:2rem;
-    opacity:0; transition:opacity 1s ease 1s;
-  }
-  #ui.visible { opacity:1; }
-
-  #ui-top { display:flex; justify-content:space-between; align-items:flex-start; }
-  #ui-title { font-family:'IM Fell English',serif; font-size:1.1rem; color:rgba(230,220,190,0.7); letter-spacing:.06em; }
-  #ui-season-wrap { text-align:right; }
-  #season-name { font-family:'Space Mono',monospace; font-size:.65rem; color:rgba(154,168,130,0.6); letter-spacing:.2em; text-transform:uppercase; }
-  #year-count { font-family:'Space Mono',monospace; font-size:.55rem; color:rgba(154,168,130,0.35); letter-spacing:.15em; margin-top:.25rem; }
-
-  #ui-bottom { display:flex; justify-content:space-between; align-items:flex-end; }
-  #haiku {
-    font-family:'IM Fell English',serif; font-style:italic;
-    font-size:clamp(.85rem,1.4vw,1.05rem); color:rgba(220,210,175,0.7);
-    line-height:1.8; max-width:340px;
-  }
-  #ui-stats {
-    text-align:right; font-family:'Space Mono',monospace; font-size:.58rem;
-    color:rgba(154,168,130,0.35); letter-spacing:.12em; line-height:2;
-  }
-
-  /* SOUND TOGGLE */
-  #sound-btn {
-    position:fixed; top:2rem; right:2rem; z-index:100; pointer-events:auto;
-    font-family:'Space Mono',monospace; font-size:.58rem; letter-spacing:.18em;
-    text-transform:uppercase; color:rgba(154,168,130,0.4);
-    background:transparent; border:none; cursor:pointer; transition:color .3s;
-    display:none;
-  }
-  #sound-btn.show { display:block; }
-  #sound-btn:hover { color:rgba(154,168,130,0.8); }
-
-  /* TOOLTIP */
-  #tooltip {
-    position:absolute; pointer-events:none;
-    font-family:'IM Fell English',serif; font-style:italic;
-    font-size:.85rem; color:rgba(220,210,175,0.85);
-    background:rgba(8,10,16,0.75); backdrop-filter:blur(8px);
-    border:1px solid rgba(200,190,155,0.1); border-radius:4px;
-    padding:10px 14px; opacity:0; transition:opacity .2s;
-    line-height:1.5; max-width:200px;
-  }
-  #tooltip .t-name { font-size:.95rem; color:rgba(230,220,190,0.95); margin-bottom:4px; font-style:normal; }
-  #tooltip .t-meta { font-size:.75rem; color:rgba(154,168,130,0.7); font-family:'Space Mono',monospace; letter-spacing:.05em; }
-
-  /* HINT */
-  #hint {
-    position:fixed; bottom:2rem; left:50%; transform:translateX(-50%);
-    font-family:'Space Mono',monospace; font-size:.58rem; letter-spacing:.18em;
-    text-transform:uppercase; color:rgba(154,168,130,0.25);
-    pointer-events:none; z-index:50; text-align:center;
-    transition:opacity 2s ease; white-space:nowrap;
-  }
-  #hint.fade-out { opacity:0; }
-
-  /* ABOUT PANEL */
-  #about-panel {
-    position:fixed; bottom:2rem; left:2rem; z-index:100;
-    max-width:280px; pointer-events:none;
-    opacity:0; transition:opacity .4s;
-  }
-  #about-panel.show { opacity:1; pointer-events:auto; }
-  #about-text {
-    font-family:'IM Fell English',serif; font-size:.82rem;
-    color:rgba(154,168,130,0.5); line-height:1.7; letter-spacing:.02em;
-  }
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#080a12}
+canvas{position:fixed;inset:0;display:block}
+#back{
+  position:fixed;top:1.8rem;left:2rem;z-index:20;
+  font-family:'DM Mono',monospace;font-size:.55rem;
+  letter-spacing:.2em;text-transform:uppercase;
+  color:rgba(210,200,180,.2);text-decoration:none;
+  border:1px solid rgba(210,200,180,.08);padding:.5rem 1rem;
+  transition:all .4s;
+}
+#back:hover{color:rgba(210,200,180,.7);border-color:rgba(210,200,180,.25)}
+#sig{
+  position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);
+  font-family:'DM Mono',monospace;font-size:.52rem;
+  letter-spacing:.25em;text-transform:uppercase;
+  color:rgba(210,200,180,.1);pointer-events:none;white-space:nowrap;
+}
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300&display=swap');
 </style>
 </head>
 <body>
-
-<!-- ENTRY -->
-<div id="entry">
-  <div id="entry-title">Garden of Returning</div>
-  <div id="entry-subtitle">A living sanctuary</div>
-  <button id="entry-btn">Enter &middot; Begin</button>
-  <div id="entry-note">Sound optional &nbsp;&middot;&nbsp; Click ground to plant &nbsp;&middot;&nbsp; Hover to tend</div>
-</div>
-
-<!-- MAIN CANVAS -->
 <canvas id="c"></canvas>
-
-<!-- UI -->
-<div id="ui">
-  <div id="ui-top">
-    <div>
-      <div id="ui-title">Garden of Returning</div>
-    </div>
-    <div id="ui-season-wrap">
-      <div id="season-name">Spring</div>
-      <div id="year-count">Year 1</div>
-    </div>
-  </div>
-  <div id="ui-bottom">
-    <div id="haiku">—</div>
-    <div id="ui-stats">
-      <div><span id="pcount">0</span> living</div>
-      <div><span id="mcount">0</span> remembered</div>
-    </div>
-  </div>
-</div>
-
-<button id="sound-btn">Sound: off</button>
-<div id="tooltip"><div class="t-name"></div><div class="t-meta"></div></div>
-<div id="hint">Hover to tend &nbsp;&middot;&nbsp; Click ground to plant &nbsp;&middot;&nbsp; Drag to summon wind</div>
+<a id="back" href="https://hydrogenbondss.github.io/jeffreytse/">← Portfolio</a>
+<div id="sig">Jeffrey N. Tse &nbsp;·&nbsp; 2026</div>
 
 <script>
-const rand=(a,b)=>Math.random()*(b-a)+a,randInt=(a,b)=>Math.floor(rand(a,b)),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),lerp=(a,b,t)=>a+(b-a)*t,hsl=(h,s,l,a=1)=>`hsla(${h%360},${clamp(s,0,100)}%,${clamp(l,0,100)}%,${a})`,dist=(x1,y1,x2,y2)=>Math.hypot(x2-x1,y2-y1);
+const C = document.getElementById('c');
+const ctx = C.getContext('2d');
+let W, H;
+let frame = 0;
+let mx = -1, my = -1;
+let prevMx = -1, prevMy = -1;
+let windForce = 0; // 0-1, cursor movement drives wind
+let ambientWind = 0; // slow ambient breathing wind
 
-const Noise=(()=>{const n=256,p=new Uint8Array(n*2);for(let i=0;i<n;i++)p[i]=i;for(let i=n-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[p[i],p[j]]=[p[j],p[i]]}for(let i=0;i<n*2;i++)p[i]=p[i&(n-1)];function fade(t){return t*t*t*(t*(t*6-15)+10)}function grad(h,x,y){const hh=h&15,u=hh<8?x:y,v=hh<4?y:(hh===12||hh===14)?x:0;return((hh&1)?-u:u)+((hh&2)?-v:v)}return function(x,y){const X=Math.floor(x)&(n-1),Y=Math.floor(y)&(n-1);x-=Math.floor(x);y-=Math.floor(y);const u=fade(x),v=fade(y),A=p[X]+Y,B=p[X+1]+Y;return lerp(v,lerp(u,grad(p[A],x,y),grad(p[B],x-1,y)),lerp(u,grad(p[A+1],x,y-1),grad(p[B+1],x-1,y-1)))}})();
+// ── REEDS ──
+const reeds = [];
+const REED_COUNT = 120;
 
-const cfg={maxPlants:65,maxBees:18,maxFireflies:35,maxMemories:50,seasonFrames:4800,gravity:0.04,audioEnabled:false};
-const seasons=[
-  {name:'Spring',skyTop:[195,68,52],skyBot:[125,58,86],ground:[108,40,26],sun:[50,92,68],growth:1.25,bee:0.95,wind:0.45,rainChance:0.22},
-  {name:'Summer',skyTop:[208,72,42],skyBot:[48,82,78],ground:[118,44,22],sun:[42,95,62],growth:1.0,bee:1.0,wind:0.35,rainChance:0.32},
-  {name:'Autumn',skyTop:[28,58,34],skyBot:[42,68,56],ground:[35,46,24],sun:[28,88,52],growth:0.2,bee:0.4,wind:0.85,rainChance:0.12},
-  {name:'Winter',skyTop:[222,26,20],skyBot:[208,20,78],ground:[212,16,14],sun:[208,35,72],growth:0.0,bee:0.0,wind:0.65,rainChance:0.0}
-];
+class Reed {
+  constructor(x, z) {
+    this.x = x;
+    this.z = z; // 0=far, 1=close
+    this.baseY = 0; // set on resize
+    this.height = 0; // set on resize
+    this.segments = 8;
+    this.sway = 0;      // current sway angle
+    this.swayVel = 0;   // sway velocity
+    this.baseSway = 0;  // resting sway (slight randomness)
+    this.thickness = 0;
+    this.colorH = 38 + Math.random() * 18; // amber to gold range
+    this.colorS = 35 + Math.random() * 25;
+    this.colorL = 28 + Math.random() * 18;
+    this.phase = Math.random() * Math.PI * 2; // for ambient sway
+    this.headSize = 0;
+    this.hasHead = Math.random() > 0.3; // cattail head
+    this.headOffset = 0.72 + Math.random() * 0.15; // where head starts
+  }
 
-class SeasonManager{constructor(){this.frame=0}get idx(){return Math.floor(this.frame/cfg.seasonFrames)%seasons.length}get nextIdx(){return(this.idx+1)%seasons.length}get t(){const v=(this.frame%cfg.seasonFrames)/cfg.seasonFrames;return v<.5?2*v*v:1-Math.pow(-2*v+2,2)/2}get(k,sub=null){if(sub!==null&&Array.isArray(seasons[this.idx][k]))return lerp(seasons[this.idx][k][sub],seasons[this.nextIdx][k][sub],this.t);return lerp(seasons[this.idx][k],seasons[this.nextIdx][k],this.t)}update(){this.frame++}}
-const sm=new SeasonManager();
+  init() {
+    const zScale = 0.45 + this.z * 0.55;
+    this.baseY = H * (0.68 + this.z * 0.08);
+    this.height = (H * 0.28 + Math.random() * H * 0.14) * zScale;
+    this.thickness = (1.2 + Math.random() * 2.2) * zScale;
+    this.baseSway = (Math.random() - .5) * 0.06;
+    this.headSize = (6 + Math.random() * 8) * zScale;
+  }
 
-const syllables=['a','i','u','e','o','ka','ki','ku','ke','ko','sa','shi','su','se','so','ta','chi','tsu','te','to','na','ni','nu','ne','no','ha','hi','fu','he','ho','ma','mi','mu','me','mo','ya','yu','yo','ra','ri','ru','re','ro','wa','n'];
-const nameSuffixes=['kaze','hana','tsuki','yama','mizu','hi','ki','ame','yuki','sora','tori','suna','ishi','kusa','mori','tsuyu','akane','sakura','kaede','fuyu','natsu','aki','haru'];
-function generateName(){if(Math.random()<.35){const pre=syllables[randInt(0,syllables.length)],suf=nameSuffixes[randInt(0,nameSuffixes.length)];return(pre[0].toUpperCase()+pre.slice(1))+suf}const parts=[];for(let i=0;i<randInt(2,4);i++)parts.push(syllables[randInt(0,syllables.length)]);let n=parts.join('');return n[0].toUpperCase()+n.slice(1)}
+  update() {
+    const zScale = 0.45 + this.z * 0.55;
+    // Ambient wind — slow sine
+    ambientWind = Math.sin(frame * 0.008 + this.phase) * 0.12
+                + Math.sin(frame * 0.021 + this.phase * 2) * 0.05;
 
-function generateHaiku(living,memories,bees,season,dayT){const lines={Spring:[['Morning dew glistens','Soft rain on new leaves','Green fingers reach up','A breath of warm air','Buds hold their secrets'],['Petals slowly open','The garden remembers','Roots drink the meltwater','Bees hum their first songs','Seeds dream in the dark'],['Life returns again','Nothing is truly lost','Hope grows from the stones','Time is a circle','Silence learns to bloom']],Summer:[['Golden light lingers','Heat shimmers above','Leaves drink the long day','The sun does not hurry','Heavy air holds scent'],['Bees borrow the sunset','Fireflies wake at dusk','Shadows grow thin and soft','Roots whisper at midnight','Flowers face the sky'],['Day and night embrace','Abundance without end','The earth breathes out warmth','Even stones are sleeping','Growth has no master']],Autumn:[['Crimson leaves let go','The wind takes its tithe','Branches bare their scars','Smoke colors the distance','Fruit falls to the soil'],['Stones remember green','Bees seek the last bloom','A hush through the garden','Colors burn then fade','Roots prepare for rest'],['Beauty is surrender','Letting go is love','What falls becomes seed','The old makes way','Autumn holds no grief']],Winter:[['Snow covers the stones','White breath, white sky, white bone','The garden holds its ghosts','Ice on sleeping branches','A single crow calls'],['Silent roots dream on','Dead names wear moss and frost','Stars watch over all','Nothing moves but wind','Memory is warmth'],['Spring waits beneath snow','Death is just a season','Stillness is a gift','What sleeps will awaken','The circle holds true']]}[season];let set=randInt(0,5);if(memories>living&&season!=='Winter')set=2;if(bees>5&&season==='Summer'&&dayT>.6)set=1;if(living===0)set=4;return`${lines[0][set]}<br>${lines[1][set]}<br>${lines[2][set]}`}
+    // Cursor wind — how close is cursor horizontally
+    let cursorWind = 0;
+    if(mx > 0) {
+      const dx = mx - this.x;
+      const influence = Math.max(0, 1 - Math.abs(dx) / (W * 0.18));
+      // Wind direction based on cursor movement
+      const windDir = (mx - prevMx) * 0.003;
+      cursorWind = influence * windForce * 0.8 * Math.sign(windDir || 1);
+    }
 
-class AudioEngine{constructor(){this.ctx=null;this.muted=true;this.nodes={};this.nextInsect=0;this.nextBird=0}init(){if(this.ctx)return;const AC=window.AudioContext||window.webkitAudioContext;this.ctx=new AC();this.master=this.ctx.createGain();this.master.gain.value=.0001;this.master.connect(this.ctx.destination);const bufSize=2*this.ctx.sampleRate,makeNoise=brown=>{const b=this.ctx.createBuffer(1,bufSize,this.ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<bufSize;i++){const w=Math.random()*2-1;d[i]=brown?((i===0)?w:(d[i-1]+w*.02)/1.02):w}return b};this.nodes.windSrc=this.ctx.createBufferSource();this.nodes.windSrc.buffer=makeNoise(true);this.nodes.windSrc.loop=true;this.nodes.windFilter=this.ctx.createBiquadFilter();this.nodes.windFilter.type='lowpass';this.nodes.windFilter.frequency.value=350;this.nodes.windGain=this.ctx.createGain();this.nodes.windSrc.connect(this.nodes.windFilter);this.nodes.windFilter.connect(this.nodes.windGain);this.nodes.windGain.connect(this.master);this.nodes.windSrc.start();this.nodes.rainSrc=this.ctx.createBufferSource();this.nodes.rainSrc.buffer=makeNoise(false);this.nodes.rainSrc.loop=true;this.nodes.rainFilter=this.ctx.createBiquadFilter();this.nodes.rainFilter.type='bandpass';this.nodes.rainFilter.frequency.value=750;this.nodes.rainFilter.Q.value=.7;this.nodes.rainGain=this.ctx.createGain();this.nodes.rainGain.gain.value=0;this.nodes.rainSrc.connect(this.nodes.rainFilter);this.nodes.rainFilter.connect(this.nodes.rainGain);this.nodes.rainGain.connect(this.master);this.nodes.rainSrc.start();this.nodes.insectGain=this.ctx.createGain();this.nodes.insectGain.gain.value=0;this.nodes.insectGain.connect(this.master);this.nodes.birdGain=this.ctx.createGain();this.nodes.birdGain.gain.value=0;this.nodes.birdGain.connect(this.master)}toggle(){if(!this.ctx)this.init();this.muted=!this.muted;const t=this.muted?.0001:.55;this.master.gain.setTargetAtTime(t,this.ctx.currentTime,.6);document.getElementById('sound-btn').textContent=this.muted?'Sound: off':'Sound: on';cfg.audioEnabled=!this.muted;if(!this.muted&&this.ctx.state==='suspended')this.ctx.resume()}update(){if(!this.ctx||this.muted)return;const now=this.ctx.currentTime,w=sm.get('wind','wind')+(mouse.windBoost*.6);this.nodes.windGain.gain.setTargetAtTime(clamp(w*.16,0,.22),now,.25);this.nodes.windFilter.frequency.setTargetAtTime(180+w*950,now,.35);const raining=weather.raining;this.nodes.rainGain.gain.setTargetAtTime(raining?clamp(sm.get('rainChance','rainChance')*.55,0,.32):0,now,.45);const season=seasons[sm.idx].name,dayT=(sm.frame%cfg.seasonFrames)/cfg.seasonFrames,insects=(season==='Spring'||season==='Summer')&&(dayT<.3||dayT>.7);if(insects&&now>this.nextInsect){this.chirp(now,rand(3500,6500),.014,'insect');this.nextInsect=now+rand(.25,1.1)}this.nodes.insectGain.gain.setTargetAtTime(insects?.035:0,now,1.2);const birds=(dayT>.12&&dayT<.38&&season!=='Winter'&&season!=='Autumn');if(birds&&now>this.nextBird&&Math.random()<.25){this.chirp(now,rand(2200,4800),.025,'bird');this.nextBird=now+rand(1.2,4.5)}}chirp(now,freq,vol,type){const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type=type==='bird'?'sine':'triangle';o.frequency.setValueAtTime(freq,now);const dur=type==='bird'?rand(.08,.16):rand(.04,.09);if(type==='bird'){o.frequency.exponentialRampToValueAtTime(freq*rand(1.3,1.9),now+dur*.5);o.frequency.exponentialRampToValueAtTime(freq*.8,now+dur)}else{o.frequency.linearRampToValueAtTime(freq+rand(-350,350),now+dur)}g.gain.setValueAtTime(0,now);g.gain.linearRampToValueAtTime(vol,now+.01);g.gain.exponentialRampToValueAtTime(.0001,now+dur);o.connect(g);g.connect(type==='bird'?this.nodes.birdGain:this.nodes.insectGain);o.start(now);o.stop(now+dur+.05)}}
-const audio=new AudioEngine();
+    const targetSway = this.baseSway + ambientWind + cursorWind;
+    const spring = (targetSway - this.sway) * 0.04;
+    this.swayVel += spring;
+    this.swayVel *= 0.88; // damping
+    this.sway += this.swayVel;
+    this.sway = Math.max(-0.45, Math.min(0.45, this.sway));
+  }
 
-const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
-let W,H,groundY;
-const stars=[];for(let i=0;i<200;i++)stars.push({x:rand(0,1),y:rand(0,.55),s:rand(.4,1.8),tw:rand(0,Math.PI*2)});
+  draw(timeOfDay, fogAlpha) {
+    const zScale = 0.45 + this.z * 0.55;
+    const fog = fogAlpha * (1 - this.z * 0.7);
 
-function resize(){W=window.innerWidth;H=window.innerHeight;canvas.width=W;canvas.height=H;groundY=H*.76}
-window.addEventListener('resize',resize);
-function terrainHeight(x){return groundY+Math.sin(x*.0016+1.1)*22+Math.sin(x*.0047)*7+Math.sin(x*.011)*2.5}
+    // Light direction — sun is low and to the right at dusk
+    const lightAngle = -0.4; // radians from vertical
+    const lightIntensity = 0.6 + this.z * 0.3;
 
-function drawSky(){const g=ctx.createLinearGradient(0,0,0,groundY);g.addColorStop(0,hsl(sm.get('skyTop',0),sm.get('skyTop',1),sm.get('skyTop',2)));g.addColorStop(1,hsl(sm.get('skyBot',0),sm.get('skyBot',1),sm.get('skyBot',2)));ctx.fillStyle=g;ctx.fillRect(0,0,W,groundY)}
+    // Color shifts with time of day
+    const h = this.colorH + timeOfDay.hueShift;
+    const s = this.colorS + timeOfDay.satShift;
+    const l = this.colorL + timeOfDay.lightShift;
 
-function drawCelestial(){const dayT=(sm.frame%cfg.seasonFrames)/cfg.seasonFrames,sunX=W*dayT,arcH=110+(seasons[sm.idx].name==='Summer'?190:seasons[sm.idx].name==='Winter'?50:130)*Math.sin(dayT*Math.PI),sunY=groundY-arcH,sunColor=hsl(sm.get('sun',0),sm.get('sun',1),sm.get('sun',2)),brightness=Math.sin(dayT*Math.PI);let starAlpha=clamp(1-brightness*2.8,0,1);if(seasons[sm.idx].name==='Winter')starAlpha=Math.max(starAlpha,.35);if(starAlpha>.01){const t=Date.now()*.0018;ctx.fillStyle=`rgba(255,255,255,${starAlpha})`;for(const s of stars){const tw=.6+Math.sin(t+s.tw)*.4;ctx.globalAlpha=starAlpha*tw;ctx.beginPath();ctx.arc(s.x*W,s.y*H,s.s*.55,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1}const glow=ctx.createRadialGradient(sunX,sunY,5,sunX,sunY,140);glow.addColorStop(0,sunColor);glow.addColorStop(.45,hsl(sm.get('sun',0),sm.get('sun',1),sm.get('sun',2),.22));glow.addColorStop(1,hsl(sm.get('sun',0),sm.get('sun',1),sm.get('sun',2),0));ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sunX,sunY,160,0,Math.PI*2);ctx.fill();const moonX=W*((dayT+.5)%1),moonY=groundY-85-Math.sin(((dayT+.5)%1)*Math.PI)*70,mb=clamp(1-brightness*1.4,0,1);if(mb>.01){ctx.fillStyle=`rgba(245,248,255,${mb})`;ctx.beginPath();ctx.arc(moonX,moonY,13,0,Math.PI*2);ctx.fill();const mg=ctx.createRadialGradient(moonX,moonY,4,moonX,moonY,48);mg.addColorStop(0,`rgba(245,248,255,${mb*.28})`);mg.addColorStop(1,`rgba(245,248,255,0)`);ctx.fillStyle=mg;ctx.beginPath();ctx.arc(moonX,moonY,58,0,Math.PI*2);ctx.fill()}}
+    ctx.save();
+    ctx.translate(this.x, this.baseY);
 
-function drawTerrain(){const h=sm.get('ground',0),s=sm.get('ground',1),l=sm.get('ground',2);ctx.fillStyle=hsl(h,s-5,l-6);ctx.beginPath();ctx.moveTo(0,H);for(let x=0;x<=W;x+=10)ctx.lineTo(x,terrainHeight(x)-22);ctx.lineTo(W,H);ctx.fill();const g=ctx.createLinearGradient(0,groundY-30,0,H);g.addColorStop(0,hsl(h,s,l));g.addColorStop(1,hsl(h,s+3,l-9));ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(0,H);for(let x=0;x<=W;x+=8)ctx.lineTo(x,terrainHeight(x));ctx.lineTo(W,H);ctx.fill()}
+    // Draw stalk segment by segment with bezier curve
+    const totalSway = this.sway * this.height;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
 
-const wind={time:0,get(x,y){const t=this.time,n=Noise(x*.0018+t*.25,y*.0028+t*.12),gust=Noise(x*.007+t,y*.007),strength=sm.get('wind','wind')*.55+mouse.windBoost;return(n*.65+gust*.35)*strength*(1+(groundY-y)/260)},update(){this.time+=.016}};
+    // Control points for natural reed curve
+    const cp1x = totalSway * 0.2;
+    const cp1y = -this.height * 0.4;
+    const cp2x = totalSway * 0.65;
+    const cp2y = -this.height * 0.75;
+    const endX = totalSway;
+    const endY = -this.height;
 
-class DNA{constructor(parent=null){if(parent){this.hue=mutate(parent.hue,22);this.sat=clamp(mutate(parent.sat,10),25,78);this.light=clamp(mutate(parent.light,9),22,52);this.flowerHue=mutate(parent.flowerHue,32);this.branchAngle=clamp(mutate(parent.branchAngle,.1),.3,.9);this.segLen=clamp(mutate(parent.segLen,3.5),15,36);this.thickness=clamp(mutate(parent.thickness,.7),2.5,8.5);this.maxDepth=clamp(Math.round(mutate(parent.maxDepth,1)),4,8);this.growthRate=clamp(mutate(parent.growthRate,.22),.65,1.9);this.leafSize=clamp(mutate(parent.leafSize,2.2),5.5,15);this.flowerSize=clamp(mutate(parent.flowerSize,1.2),3.2,8);this.tropism=clamp(mutate(parent.tropism,.025),0,.16)}else{this.hue=rand(88,148);this.sat=rand(38,62);this.light=rand(30,46);this.flowerHue=rand(0,360);this.branchAngle=rand(.45,.68);this.segLen=rand(22,30);this.thickness=rand(4,6.5);this.maxDepth=randInt(5,8);this.growthRate=rand(.95,1.25);this.leafSize=rand(8,13);this.flowerSize=rand(4.2,6.5);this.tropism=rand(.03,.1)}}static cross(a,b){const mix=k=>lerp(a[k],b[k],.5),d=new DNA(a);d.hue=mix('hue');d.sat=mix('sat');d.light=mix('light');d.flowerHue=mix('flowerHue');d.branchAngle=mix('branchAngle');d.segLen=mix('segLen');d.thickness=mix('thickness');d.maxDepth=Math.round(mix('maxDepth'));d.growthRate=mix('growthRate');d.leafSize=mix('leafSize');d.flowerSize=mix('flowerSize');d.tropism=mix('tropism');return new DNA(d)}}
-function mutate(v,a){return v+rand(-a,a)}
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY);
 
-class Leaf{constructor(angle,size){this.baseAngle=angle;this.size=size;this.scale=0;this.state=0;this.stateTimer=0;this.hueOff=rand(-12,12);this.dropVx=rand(-1.2,1.2);this.dropVy=rand(.6,2.2);this.dropRot=rand(-.12,.12);this.dropX=0;this.dropY=0}update(growth,season){if(this.state===3){this.dropX+=this.dropVx+wind.get(this.dropX,this.dropY)*8;this.dropY+=this.dropVy;return}const target=growth>.38?1:(growth/.38);this.scale+=(target-this.scale)*.035;if(season==='Autumn'&&this.state<2&&growth>.8){this.stateTimer++;if(this.stateTimer>rand(140,450))this.state=2}else if(season==='Winter'){if(Math.random()<.012)this.state=3}else if(season==='Spring'&&this.state===2){if(Math.random()<.006)this.state=1}}color(baseHue,baseSat,baseLight,season){if(this.state===0)return hsl(baseHue+10,baseSat-10,baseLight-5);if(this.state===1)return hsl(baseHue+this.hueOff,baseSat,baseLight+8);if(this.state===2){const t=clamp((this.stateTimer-140)/320,0,1);return hsl(lerp(baseHue+this.hueOff,rand(18,42),t),lerp(baseSat,78,t*.45),lerp(baseLight+8,46,t))}return'rgba(0,0,0,0)'}draw(ctx,x,y,branchAngle,baseHue,baseSat,baseLight,season,zScale){if(this.scale<.01)return;if(this.state===3){ctx.save();ctx.translate(this.dropX,this.dropY);ctx.rotate(branchAngle+this.dropRot*12);ctx.scale(this.size*zScale*.75,this.size*zScale*.75);leafPath(ctx);ctx.fillStyle=hsl(32,52,34,.8);ctx.fill();ctx.restore();return}ctx.save();ctx.translate(x,y);ctx.rotate(branchAngle+this.baseAngle);const s=this.size*this.scale*zScale;ctx.scale(s,s);ctx.fillStyle=this.color(baseHue,baseSat,baseLight,season);leafPath(ctx);ctx.fill();ctx.strokeStyle='rgba(0,0,0,0.1)';ctx.lineWidth=.25;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-5);ctx.stroke();ctx.restore()}}
-function leafPath(ctx){ctx.beginPath();ctx.moveTo(0,0);ctx.bezierCurveTo(2,-2,3,-5,0,-9);ctx.bezierCurveTo(-3,-5,-2,-2,0,0);ctx.closePath()}
+    // Stalk gradient — backlit at dusk
+    const stalkGrad = ctx.createLinearGradient(
+      -this.thickness, 0, this.thickness * 2, -this.height
+    );
 
-class Flower{constructor(size,hueOff){this.size=size;this.hueOff=hueOff;this.bloom=0;this.wilt=0;this.state='bud';this.petalCount=randInt(5,9)}update(growth,season){const gm=sm.get('growth','growth');if(season==='Winter'){this.bloom=Math.max(0,this.bloom-.018);this.wilt=Math.min(1,this.wilt+.014);this.state='wilt';return}if(growth>.86&&season!=='Autumn'){if(this.state==='bud')this.state='bloom';if(this.state==='bloom'){this.bloom=Math.min(1,this.bloom+.007*gm);this.wilt=Math.max(0,this.wilt-.008)}}else{this.bloom=Math.max(0,this.bloom-.008);if(this.bloom<=.04)this.state='bud'}if(season==='Autumn'&&this.bloom>.45)this.wilt=Math.min(1,this.wilt+.006)}draw(ctx,x,y,branchAngle,hue,zScale){if(this.bloom<.01){if(this.state==='bud'){ctx.fillStyle=hsl(hue+32,58,38);ctx.beginPath();ctx.arc(x,y,this.size*zScale*.5,0,Math.PI*2);ctx.fill()}return}const s=this.size*this.bloom*zScale,wiltAngle=this.wilt*.55,fh=hue+this.hueOff;for(let i=0;i<this.petalCount;i++){const ang=(i/this.petalCount)*Math.PI*2+branchAngle;ctx.save();ctx.translate(x,y);ctx.rotate(ang);ctx.rotate(wiltAngle);const px=Math.sin(i*2.2)*1.3*this.wilt;ctx.translate(px,-s*.55);ctx.scale(s*.48,s*.88);ctx.fillStyle=hsl(fh,78,64-this.wilt*18);ctx.beginPath();ctx.moveTo(0,0);ctx.bezierCurveTo(1,-1,1,-3,0,-4);ctx.bezierCurveTo(-1,-3,-1,-1,0,0);ctx.fill();ctx.restore()}ctx.fillStyle=hsl(fh+42,88,74-this.wilt*26);ctx.beginPath();ctx.arc(x,y,s*.32,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(255,242,200,0.9)';for(let i=0;i<5;i++){const a=i*1.256+branchAngle;ctx.beginPath();ctx.arc(x+Math.cos(a)*s*.14,y+Math.sin(a)*s*.14,s*.07,0,Math.PI*2);ctx.fill()}}}
+    // Backlit: bright edge toward light source, dark body
+    stalkGrad.addColorStop(0, `hsla(${h},${s}%,${l*0.6}%,${0.9 - fog})`);
+    stalkGrad.addColorStop(0.3, `hsla(${h+8},${s+10}%,${l+15}%,${0.95 - fog})`);
+    stalkGrad.addColorStop(0.7, `hsla(${h},${s}%,${l}%,${0.85 - fog})`);
+    stalkGrad.addColorStop(1, `hsla(${h-5},${s-8}%,${l+8}%,${0.9 - fog})`);
 
-class Branch{constructor(parent,depth,baseAngle,maxLen,thickness,dna){this.parent=parent;this.depth=depth;this.baseAngle=baseAngle;this.angle=baseAngle;this.angularVel=0;this.maxLen=maxLen;this.thickness=thickness;this.grown=0;this.endX=0;this.endY=0;this.children=[];this.leaf=Math.random()>.38?new Leaf(rand(-.55,.55),dna.leafSize*rand(.85,1.25)):null;this.flower=(Math.random()>.62&&depth>2)?new Flower(dna.flowerSize*rand(.85,1.15),rand(-18,18)):null}update(growthRatio,x,y,parentGlobalAngle){const myGrowth=Math.pow(growthRatio,1+this.depth*.2),len=this.maxLen*myGrowth;this.grown=myGrowth;const wx=x+Math.cos(parentGlobalAngle+this.angle)*(len*.55),wy=y+Math.sin(parentGlobalAngle+this.angle)*(len*.55),wf=wind.get(wx,wy),torqueWind=wf*(1+this.depth*.35)*.014,torqueGravity=-cfg.gravity*this.depth*.018,torqueSpring=(this.baseAngle-this.angle)*(.055-this.depth*.0025);this.angularVel+=torqueWind+torqueGravity+torqueSpring;this.angularVel*=.925;this.angle+=this.angularVel;const globalAngle=parentGlobalAngle+this.angle;this.endX=x+Math.cos(globalAngle)*len;this.endY=y+Math.sin(globalAngle)*len;this.rx=x;this.ry=y;this.rang=globalAngle;this.rlen=len;for(const c of this.children)c.update(growthRatio,this.endX,this.endY,globalAngle)}draw(ctx,sHS,sSat,sLight,zScale,bH,bS,bL,season){if(this.grown<.01)return;const len=this.rlen,ang=this.rang,w1=this.thickness*zScale*this.grown,w2=this.thickness*.62*zScale*this.grown,perp=ang+Math.PI/2,x0=this.rx-Math.cos(perp)*w1*.5,y0=this.ry-Math.sin(perp)*w1*.5,x1=this.rx+Math.cos(perp)*w1*.5,y1=this.ry+Math.sin(perp)*w1*.5,x2=this.endX+Math.cos(perp)*w2*.5,y2=this.endY+Math.sin(perp)*w2*.5,x3=this.endX-Math.cos(perp)*w2*.5,y3=this.endY-Math.sin(perp)*w2*.5,h=bH+(this.depth*-2.5)+sHS,s=clamp(bS+sSat-this.depth*1.8,0,100),l=clamp(bL+sLight+this.depth*2.8,0,95);ctx.fillStyle=hsl(h,s,l);ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.lineTo(x2,y2);ctx.lineTo(x3,y3);ctx.closePath();ctx.fill();if(this.leaf)this.leaf.draw(ctx,this.endX,this.endY,ang,bH,bS,bL,season,zScale);if(this.flower)this.flower.draw(ctx,this.endX,this.endY,ang,bH+(this.leaf?.hueOff||0),zScale);for(const c of this.children)c.draw(ctx,sHS,sSat,sLight,zScale,bH,bS,bL,season)}}
+    ctx.strokeStyle = stalkGrad;
+    ctx.lineWidth = this.thickness;
+    ctx.lineCap = 'round';
+    ctx.stroke();
 
-class Plant{constructor(x,z,dna=null){this.x=x;this.z=z;this.y=terrainHeight(x);this.dna=dna||new DNA();this.name=generateName();this.birthFrame=sm.frame;this.age=0;this.maturity=rand(550,950);this.dead=false;this.health=1;this.tended=0;this.firstBloom=false;this.root=null;this.build()}build(){const add=(parent,depth,angle)=>{const len=this.dna.segLen*Math.pow(.76,depth)*rand(.88,1.15),thick=this.dna.thickness*Math.pow(.7,depth),b=new Branch(parent,depth,angle,len,thick,this.dna);if(parent)parent.children.push(b);else this.root=b;if(depth<this.dna.maxDepth){const count=Math.random()>.82?3:2;for(let i=0;i<count;i++){const spread=(i-(count-1)/2)*this.dna.branchAngle;add(b,depth+1,angle+spread+rand(-.09,.09)+this.dna.tropism*depth)}}};add(null,0,-Math.PI/2+rand(-.07,.07))}update(season,cursorDist){const gm=sm.get('growth','growth');if(cursorDist<80){this.tended+=1;this.health=Math.min(1,this.health+.003)}const tendBonus=1+Math.min(this.tended/300,.25);if(gm>0&&this.age<this.maturity)this.age+=this.dna.growthRate*gm*tendBonus;const ratio=Math.min(1,this.age/this.maturity);this.root.update(ratio,this.x,this.y,0);if(!this.firstBloom&&this.root){let hasOpen=false;this.visit(b=>{if(b.flower&&b.flower.state==='bloom'&&b.flower.bloom>.6)hasOpen=true});if(hasOpen){this.firstBloom=true;for(let i=0;i<14;i++)weather.addParticle(this.x,this.y-20,'pollen',this.dna.flowerHue)}}if(season==='Winter')this.health-=.00022;else if(season==='Spring')this.health=Math.min(1,this.health+.00035);if(this.health<=0)this.dead=true}visit(fn){const stack=[this.root];while(stack.length){const b=stack.pop();fn(b);for(const c of b.children)stack.push(c)}}draw(ctx,season){const zScale=.7+this.z*.3,fog=1-this.z*.32,seasonHueShift=season==='Autumn'?-42:(season==='Winter'?155:0),seasonSat=season==='Winter'?-32:(season==='Autumn'?12:0),seasonLight=season==='Winter'?16:(season==='Autumn'?7:0),dayT=(sm.frame%cfg.seasonFrames)/cfg.seasonFrames,sunAngle=(dayT-.5)*.55,shadowLen=(26+this.dna.maxDepth*5)*zScale,sx=this.x+Math.sin(sunAngle)*shadowLen,sy=this.y+2;ctx.fillStyle=`rgba(8,12,10,${.14*this.z+.04})`;ctx.beginPath();ctx.ellipse(sx,sy,(11+this.dna.maxDepth*3.5)*zScale,3.2*zScale,sunAngle*.25,0,Math.PI*2);ctx.fill();ctx.save();this.root.draw(ctx,seasonHueShift,seasonSat+(1-fog)*-18,seasonLight+(1-fog)*-9,zScale,this.dna.hue,this.dna.sat,this.dna.light,season);ctx.restore()}drawSkeleton(ctx){const zScale=.7+this.z*.3,drawBone=(b,x,y,pa)=>{if(b.grown<.01)return;const len=b.rlen*.85,ang=b.rang,ex=x+Math.cos(ang)*len,ey=y+Math.sin(ang)*len;ctx.strokeStyle=`rgba(220,225,230,${.12+this.z*.08})`;ctx.lineWidth=Math.max(.4,b.thickness*zScale*b.grown*.35);ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(ex,ey);ctx.stroke();for(const c of b.children)drawBone(c,ex,ey,ang)};drawBone(this.root,this.x,this.y,0)}}
+    // Backlit rim light (golden edge)
+    if(this.z > 0.4 && timeOfDay.rimLight > 0) {
+      ctx.beginPath();
+      ctx.moveTo(this.thickness * 0.4, 0);
+      ctx.bezierCurveTo(
+        cp1x + this.thickness * 0.5, cp1y,
+        cp2x + this.thickness * 0.4, cp2y,
+        endX + this.thickness * 0.3, endY
+      );
+      ctx.strokeStyle = `hsla(42,88%,68%,${timeOfDay.rimLight * this.z * 0.6})`;
+      ctx.lineWidth = this.thickness * 0.35;
+      ctx.stroke();
+    }
 
-class Bee{constructor(){this.x=rand(0,W);this.y=rand(terrainHeight(this.x)-240,terrainHeight(this.x)-35);this.vx=rand(-2,2);this.vy=rand(-1,1);this.maxSpeed=rand(2.4,4.2);this.target=null;this.carrying=false;this.idle=0;this.size=rand(2.2,3.4);this.hoverPhase=rand(0,Math.PI*2)}update(){const activity=sm.get('bee','bee');if(activity<.05){this.x+=this.vx*.05;this.y+=this.vy*.05;if(this.y<-30)this.y=-30;return}this.hoverPhase+=.14;this.vx+=rand(-.22,.22)+Math.sin(this.hoverPhase)*.35;this.vy+=rand(-.22,.22)+Math.cos(this.hoverPhase*2)*.18;if(!this.target||Math.random()<.007)this.pickTarget();if(this.target){const dx=this.target.endX-this.x,dy=this.target.endY-this.y,d=Math.hypot(dx,dy);if(d<8){const plant=findPlant(this.target);if(plant){if(!this.carrying&&this.target.flower&&this.target.flower.bloom>.5){this.carrying=true;for(let i=0;i<4;i++)weather.addParticle(this.x,this.y,'pollen',plant.dna.flowerHue)}else if(this.carrying&&plants.length<cfg.maxPlants&&Math.random()<.1){const sx=clamp(plant.x+rand(-100,100),30,W-30),sz=clamp(plant.z+rand(-.25,.25),0,1);plants.push(new Plant(sx,sz,DNA.cross(plant.dna,plant.dna)));this.carrying=false}}this.target=null;this.idle=rand(20,70)}else{this.vx+=(dx/d)*.11;this.vy+=(dy/d)*.11}}if(this.x<0)this.vx+=.16;if(this.x>W)this.vx-=.16;const gy=terrainHeight(this.x);if(this.y<gy-300)this.vy+=.16;if(this.y>gy-12)this.vy-=.16;const limit=this.idle>0?this.maxSpeed*.32:this.maxSpeed*activity,sp=Math.hypot(this.vx,this.vy);if(sp>limit){this.vx=(this.vx/sp)*limit;this.vy=(this.vy/sp)*limit}this.x+=this.vx;this.y+=this.vy;if(this.idle>0)this.idle--}pickTarget(){const candidates=[];for(const p of plants){p.visit(b=>{if(b.flower&&b.flower.bloom>.25&&b.flower.state!=='wilt'){const d=dist(this.x,this.y,b.endX,b.endY);if(d<280)candidates.push({b,d})}})}if(candidates.length){candidates.sort((a,b)=>a.d-b.d);this.target=candidates[randInt(0,Math.min(3,candidates.length-1))].b}}draw(ctx){if(sm.get('bee','bee')<.05)return;const ang=Math.atan2(this.vy,this.vx);ctx.save();ctx.translate(this.x,this.y);ctx.rotate(ang);ctx.fillStyle='#f2c12e';ctx.beginPath();ctx.ellipse(0,0,this.size*2.1,this.size,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#1a1a1a';for(let i=-1;i<=1;i++){ctx.beginPath();ctx.arc(i*this.size*.85,0,this.size*.52,0,Math.PI*2);ctx.fill()}if(this.carrying){ctx.fillStyle='#d4a017';ctx.beginPath();ctx.ellipse(-this.size,this.size*.55,this.size*.55,this.size*.32,.4,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(-this.size,-this.size*.55,this.size*.55,this.size*.32,-.4,0,Math.PI*2);ctx.fill()}const wf=.08,wa=4.5,t=Date.now()*wf;for(let k=0;k<3;k++){const phase=(t-k*.7)%(Math.PI*2),wy=Math.sin(phase)*wa*.55;ctx.fillStyle=`rgba(255,255,255,${.32-k*.09})`;ctx.beginPath();ctx.ellipse(0,-this.size-2+wy,this.size*1.5,this.size*.45,.22,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(0,this.size+2-wy,this.size*1.5,this.size*.45,-.22,0,Math.PI*2);ctx.fill()}ctx.restore()}}
-function findPlant(branch){for(const p of plants){let f=false;p.visit(b=>{if(b===branch)f=true});if(f)return p}return null}
+    // Cattail head
+    if(this.hasHead) {
+      const headX = endX * this.headOffset + cp2x * (1 - this.headOffset);
+      const headY = endY * this.headOffset + cp2y * (1 - this.headOffset);
 
-class Firefly{constructor(){this.x=rand(0,W);this.y=rand(terrainHeight(this.x)-220,terrainHeight(this.x)-20);this.vx=rand(-.6,.6);this.vy=rand(-.4,.4);this.phase=rand(0,Math.PI*2);this.size=rand(1.2,2.4);this.target=null}update(){const season=seasons[sm.idx].name,dayT=(sm.frame%cfg.seasonFrames)/cfg.seasonFrames,active=(season==='Summer'&&dayT>.55)||(season==='Spring'&&dayT>.65);if(!active){this.y=-50;return}const flowerTargets=[];for(const p of plants){p.visit(b=>{if(b.flower&&b.flower.bloom>.4)flowerTargets.push({x:b.endX,y:b.endY})})}let tx=mouse.x,ty=mouse.y,weight=.25;if(flowerTargets.length&&Math.random()<.3){const t=flowerTargets[randInt(0,flowerTargets.length-1)];tx=t.x;ty=t.y;weight=.18}this.vx+=(tx-this.x)*.0008*weight+rand(-.08,.08);this.vy+=(ty-this.y)*.0008*weight+rand(-.08,.08);const sp=Math.hypot(this.vx,this.vy);if(sp>1.6){this.vx=(this.vx/sp)*1.6;this.vy=(this.vy/sp)*1.6}this.x+=this.vx;this.y+=this.vy;this.phase+=.12}draw(ctx){const season=seasons[sm.idx].name,dayT=(sm.frame%cfg.seasonFrames)/cfg.seasonFrames;if(!(season==='Summer'&&dayT>.55)&&!(season==='Spring'&&dayT>.65))return;const glow=.5+Math.sin(this.phase)*.5;ctx.fillStyle=`rgba(200,255,140,${glow})`;ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2);ctx.fill();const rg=ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.size*5);rg.addColorStop(0,`rgba(200,255,140,${glow*.35})`);rg.addColorStop(1,'rgba(200,255,140,0)');ctx.fillStyle=rg;ctx.beginPath();ctx.arc(this.x,this.y,this.size*5,0,Math.PI*2);ctx.fill()}}
+      // Elongated cattail shape
+      const hh = this.headSize * 2.2;
+      const hw = this.headSize * 0.38;
 
-class Memory{constructor(x,z,y,name,frame){this.x=x;this.z=z;this.y=y;this.name=name;this.deathFrame=frame;this.moss=0}draw(ctx,season){const zScale=.7+this.z*.3;this.moss=Math.min(1,this.moss+.002);const age=(sm.frame-this.deathFrame)/1200,alpha=clamp(.55+this.z*.25-age*.15,.15,.85),w=16*zScale,h=8*zScale;ctx.fillStyle=`rgba(145,150,155,${alpha})`;ctx.beginPath();ctx.ellipse(this.x,this.y-h*.3,w,h,0,0,Math.PI*2);ctx.fill();if(season!=='Winter'){ctx.fillStyle=`rgba(90,120,70,${alpha*.6*this.moss})`;ctx.beginPath();ctx.ellipse(this.x-w*.3,this.y-h*.5,w*.45,h*.55,-.2,0,Math.PI*2);ctx.fill()}if(season==='Winter'){ctx.fillStyle=`rgba(255,255,255,${alpha*.7})`;ctx.beginPath();ctx.ellipse(this.x,this.y-h*.6,w*.6,h*.35,0,0,Math.PI*2);ctx.fill()}ctx.fillStyle=`rgba(40,45,50,${alpha*.55})`;ctx.font=`${Math.max(6,8*zScale)}px 'IM Fell English',Georgia,serif`;ctx.textAlign='center';ctx.fillText(this.name,this.x,this.y-h*.15)}}
+      ctx.beginPath();
+      ctx.ellipse(
+        headX, headY - hh * 0.5,
+        hw * zScale, hh * 0.5,
+        this.sway * 0.3, 0, Math.PI * 2
+      );
 
-const weather={particles:[],raining:false,rainAngle:0,update(){const season=seasons[sm.idx].name,chance=sm.get('rainChance','rainChance');this.raining=(season!=='Winter'&&season!=='Autumn')?(Math.random()<chance*.045):false;if(season==='Winter'&&Math.random()<.22)this.addParticle(rand(0,W),-5,'snow');if(this.raining){this.rainAngle=wind.get(W*.5,groundY*.5)*.45;for(let i=0;i<Math.floor(chance*5.5);i++)this.addParticle(rand(0,W),rand(-10,groundY-40),'rain')}for(let i=this.particles.length-1;i>=0;i--){const p=this.particles[i];p.x+=p.vx+wind.get(p.x,p.y)*(p.type==='snow'?2.8:1);p.y+=p.vy;p.life--;if(p.life<=0||p.y>H)this.particles.splice(i,1)}},addParticle(x,y,type,hue=0){if(type==='rain')this.particles.push({x,y,vx:this.rainAngle+rand(-.4,.4),vy:rand(11,17),life:rand(10,18),type,hue});else if(type==='snow')this.particles.push({x,y,vx:rand(-.9,.9),vy:rand(.9,2.6),life:rand(130,280),type,hue});else if(type==='pollen')this.particles.push({x,y,vx:rand(-1.1,1.1),vy:rand(-.6,1.3),life:rand(35,110),type,hue})},draw(ctx){for(const p of this.particles){if(p.type==='rain'){ctx.strokeStyle='rgba(205,218,235,0.32)';ctx.lineWidth=1.1;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x-p.vx*1.4,p.y-p.vy*1.1);ctx.stroke()}else if(p.type==='snow'){ctx.fillStyle=`rgba(255,255,255,${p.life/180})`;ctx.beginPath();ctx.arc(p.x,p.y,1.6,0,Math.PI*2);ctx.fill()}else if(p.type==='pollen'){ctx.fillStyle=hsl(p.hue,82,68,p.life/80);ctx.beginPath();ctx.arc(p.x,p.y,1.4,0,Math.PI*2);ctx.fill()}}}};
+      const headGrad = ctx.createLinearGradient(
+        headX - hw, headY - hh,
+        headX + hw * 1.5, headY
+      );
+      headGrad.addColorStop(0, `hsla(22,52%,24%,${0.92 - fog})`);
+      headGrad.addColorStop(0.4, `hsla(28,58%,32%,${0.95 - fog})`);
+      headGrad.addColorStop(1, `hsla(32,48%,22%,${0.85 - fog})`);
+      ctx.fillStyle = headGrad;
+      ctx.fill();
 
-const mycelium={lines:[],lastUpdate:0,update(){if(sm.frame-this.lastUpdate<40)return;this.lastUpdate=sm.frame;this.lines.length=0;const season=seasons[sm.idx].name,night=1-Math.sin((sm.frame%cfg.seasonFrames)/cfg.seasonFrames*Math.PI)*1.2;if(night<=0||season==='Winter')return;for(let i=0;i<plants.length;i++){for(let j=i+1;j<plants.length;j++){const a=plants[i],b=plants[j],d=Math.hypot(a.x-b.x,a.y-b.y);if(d<90&&a.z>.3&&b.z>.3){const health=(a.health+b.health)*.5,alpha=clamp(night*health*.35,0,.55)*(1-d/90);this.lines.push({x1:a.x,y1:a.y,x2:b.x,y2:b.y,alpha,pulse:rand(0,Math.PI*2)})}}}},draw(ctx){const season=seasons[sm.idx].name;if(season==='Winter')return;const t=Date.now()*.002;for(const ln of this.lines){const glow=.6+Math.sin(t+ln.pulse)*.4;ctx.strokeStyle=`rgba(160,220,180,${ln.alpha*glow})`;ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(ln.x1,ln.y1);ctx.lineTo(ln.x2,ln.y2);ctx.stroke()}}};
+      // Rim on head
+      if(timeOfDay.rimLight > 0.3) {
+        ctx.beginPath();
+        ctx.ellipse(headX + hw * 0.5, headY - hh * 0.5, hw * 0.2 * zScale, hh * 0.48, this.sway * 0.3, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(42,80%,62%,${timeOfDay.rimLight * 0.35})`;
+        ctx.fill();
+      }
+    }
 
-const plants=[],bees=[],fireflies=[],memories=[];
-const mouse={x:0,y:0,down:false,windBoost:0};
-for(let i=0;i<cfg.maxFireflies;i++)fireflies.push(new Firefly());
-
-function spawnPlants(){plants.length=0;const count=Math.min(cfg.maxPlants,Math.floor(W/24));for(let i=0;i<count;i++){const z=rand(0,1),p=new Plant(rand(30,W-30),z);p.age=rand(0,p.maturity);plants.push(p)}plants.sort((a,b)=>a.z-b.z)}
-function spawnBees(){bees.length=0;for(let i=0;i<cfg.maxBees;i++)bees.push(new Bee())}
-
-const tooltip=document.getElementById('tooltip');
-let hoveredPlant=null,lastHaikuFrame=-999;
-
-function updateUI(){
-  document.getElementById('pcount').textContent=plants.length;
-  document.getElementById('mcount').textContent=memories.length;
-  document.getElementById('year-count').textContent=`Year ${Math.floor(sm.frame/(cfg.seasonFrames*4))+1}`;
-  document.getElementById('season-name').textContent=seasons[sm.idx].name;
-  if(sm.frame-lastHaikuFrame>420){
-    const living=plants.length,mem=memories.length,activeBees=bees.filter(b=>sm.get('bee','bee')>.05).length,dayT=(sm.frame%cfg.seasonFrames)/cfg.seasonFrames;
-    document.getElementById('haiku').innerHTML=generateHaiku(living,mem,activeBees,seasons[sm.idx].name,dayT);
-    lastHaikuFrame=sm.frame;
+    ctx.restore();
   }
 }
 
-function tooltipFor(p){
-  const years=((sm.frame-p.birthFrame)/(cfg.seasonFrames*4)).toFixed(1);
-  const healthLabel=p.health>.7?'Thriving':p.health>.35?'Struggling':'Fading';
-  tooltip.querySelector('.t-name').textContent=p.name;
-  tooltip.querySelector('.t-meta').textContent=`${years} years · ${healthLabel}${p.firstBloom?' · Bloomed':''}`;
-  tooltip.style.left=Math.min(mouse.x+16,W-220)+'px';
-  tooltip.style.top=Math.max(mouse.y-40,10)+'px';
-  tooltip.style.opacity=1;
+// ── RAIN ──
+const rainDrops = [];
+let isRaining = false;
+let rainTimer = 0;
+let rainDuration = 0;
+let rainAngle = 0.15;
+
+class RainDrop {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = Math.random() * W * 1.3 - W * 0.15;
+    this.y = Math.random() * H * 0.5 - H * 0.1;
+    this.len = 12 + Math.random() * 18;
+    this.speed = 14 + Math.random() * 8;
+    this.alpha = 0.15 + Math.random() * 0.2;
+  }
+  update() {
+    this.x += Math.sin(rainAngle) * this.speed * 0.4;
+    this.y += this.speed;
+    if(this.y > H + 20) this.reset();
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.moveTo(this.x, this.y);
+    ctx.lineTo(this.x + Math.sin(rainAngle) * this.len * 0.4, this.y + this.len);
+    ctx.strokeStyle = `rgba(180,200,230,${this.alpha})`;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  }
 }
 
-canvas.addEventListener('pointermove',e=>{
-  const rect=canvas.getBoundingClientRect(),prevX=mouse.x,prevY=mouse.y;
-  mouse.x=e.clientX-rect.left;mouse.y=e.clientY-rect.top;
-  if(mouse.down)mouse.windBoost=clamp(mouse.windBoost+Math.hypot(mouse.x-prevX,mouse.y-prevY)*.0018,0,1.4);
-  let best=null,bestD=Infinity;
-  for(const p of plants){const d=Math.hypot(p.x-mouse.x,p.y-mouse.y);if(d<50&&d<bestD){bestD=d;best=p}}
-  hoveredPlant=best;
-  if(hoveredPlant)tooltipFor(hoveredPlant);else tooltip.style.opacity=0;
+// ── FIREFLIES ──
+const fireflies = [];
+class Firefly {
+  constructor() {
+    this.x = Math.random() * W;
+    this.y = H * 0.3 + Math.random() * H * 0.4;
+    this.vx = (Math.random() - .5) * 0.6;
+    this.vy = (Math.random() - .5) * 0.4;
+    this.phase = Math.random() * Math.PI * 2;
+    this.pulseSpeed = 0.03 + Math.random() * 0.04;
+    this.size = 1.5 + Math.random() * 1.5;
+  }
+  update() {
+    this.phase += this.pulseSpeed;
+    this.vx += (Math.random() - .5) * 0.06;
+    this.vy += (Math.random() - .5) * 0.04;
+    this.vx *= 0.98; this.vy *= 0.98;
+    this.x += this.vx; this.y += this.vy;
+    if(this.x < 0) this.x = W;
+    if(this.x > W) this.x = 0;
+    if(this.y < H * 0.2) this.vy += 0.04;
+    if(this.y > H * 0.8) this.vy -= 0.04;
+  }
+  draw(alpha) {
+    const glow = Math.max(0, Math.sin(this.phase)) * alpha;
+    if(glow < 0.05) return;
+    const g = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 8);
+    g.addColorStop(0, `rgba(180,255,120,${glow * 0.9})`);
+    g.addColorStop(0.3, `rgba(160,240,100,${glow * 0.4})`);
+    g.addColorStop(1, `rgba(140,220,80,0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size * 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(220,255,180,${glow})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ── MYCELIUM ──
+const myceliumLines = [];
+let myceliumTimer = 0;
+let stillTimer = 0; // how long cursor has been still
+
+// ── TIME OF DAY ──
+function getTimeOfDay() {
+  const h = new Date().getHours();
+  const min = new Date().getMinutes();
+  const t = h + min / 60;
+
+  // Always render as dusk (18-21) but shift slightly based on real hour
+  // This makes it always feel like the right time to be here
+  const dusk = {
+    skyTop: [220, 45, 12],    // deep violet-blue
+    skyMid: [18, 62, 28],     // warm amber horizon
+    skyBot: [12, 55, 42],     // orange-peach at horizon
+    groundH: 28, groundS: 38, groundL: 8,
+    fogColor: [180, 140, 100],
+    fogAlpha: 0.18,
+    hueShift: 0,
+    satShift: 0,
+    lightShift: 0,
+    rimLight: 0.85,
+    fireflyAlpha: 0,
+    starAlpha: 0,
+  };
+
+  // Modulate based on actual hour
+  if(t >= 20 || t < 5) {
+    // Night — deep and still
+    return {
+      ...dusk,
+      skyTop: [230, 35, 8],
+      skyMid: [225, 28, 12],
+      skyBot: [220, 22, 18],
+      fogAlpha: 0.28,
+      hueShift: 15,
+      satShift: -12,
+      lightShift: -8,
+      rimLight: 0.2,
+      fireflyAlpha: 0.9,
+      starAlpha: 0.7,
+    };
+  } else if(t >= 17 && t < 20) {
+    // Dusk — most beautiful
+    const progress = (t - 17) / 3;
+    return {
+      ...dusk,
+      rimLight: 0.9 - progress * 0.6,
+      fireflyAlpha: progress * 0.7,
+      starAlpha: progress * 0.3,
+    };
+  } else if(t >= 5 && t < 9) {
+    // Dawn
+    return {
+      ...dusk,
+      skyTop: [200, 40, 10],
+      skyMid: [20, 70, 35],
+      skyBot: [30, 65, 55],
+      rimLight: 0.6,
+      hueShift: -8,
+      lightShift: 5,
+    };
+  } else {
+    // Daytime — still render as dusk for consistency
+    return dusk;
+  }
+}
+
+// ── STARS ──
+const stars = Array.from({length: 160}, () => ({
+  x: Math.random(), y: Math.random() * 0.6,
+  s: 0.3 + Math.random() * 1.2,
+  tw: Math.random() * Math.PI * 2,
+}));
+
+// ── AUDIO ──
+let audioCtx, windGain, rainGain, cricketGain, masterGain;
+let audioReady = false;
+
+function initAudio() {
+  if(audioReady) return;
+  audioReady = true;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0;
+    masterGain.connect(audioCtx.destination);
+
+    const rate = audioCtx.sampleRate;
+
+    // Brown noise for wind
+    const bufLen = rate * 4;
+    function makeBrownNoise() {
+      const buf = audioCtx.createBuffer(1, bufLen, rate);
+      const d = buf.getChannelData(0);
+      let last = 0;
+      for(let i = 0; i < bufLen; i++) {
+        const w = Math.random() * 2 - 1;
+        last = (last + 0.02 * w) / 1.02;
+        d[i] = last * 3.5;
+      }
+      return buf;
+    }
+    function makeWhiteNoise() {
+      const buf = audioCtx.createBuffer(1, bufLen, rate);
+      const d = buf.getChannelData(0);
+      for(let i = 0; i < bufLen; i++) d[i] = Math.random() * 2 - 1;
+      return buf;
+    }
+
+    // Wind — brown noise, lowpass filtered
+    const windSrc = audioCtx.createBufferSource();
+    windSrc.buffer = makeBrownNoise();
+    windSrc.loop = true;
+    const windFilt = audioCtx.createBiquadFilter();
+    windFilt.type = 'lowpass';
+    windFilt.frequency.value = 320;
+    windGain = audioCtx.createGain();
+    windGain.gain.value = 0.08;
+    windSrc.connect(windFilt);
+    windFilt.connect(windGain);
+    windGain.connect(masterGain);
+    windSrc.start();
+
+    // Rain — white noise, bandpass
+    const rainSrc = audioCtx.createBufferSource();
+    rainSrc.buffer = makeWhiteNoise();
+    rainSrc.loop = true;
+    const rainFilt = audioCtx.createBiquadFilter();
+    rainFilt.type = 'bandpass';
+    rainFilt.frequency.value = 800;
+    rainFilt.Q.value = 0.6;
+    rainGain = audioCtx.createGain();
+    rainGain.gain.value = 0;
+    rainSrc.connect(rainFilt);
+    rainFilt.connect(rainGain);
+    rainGain.connect(masterGain);
+    rainSrc.start();
+
+    // Crickets / insects — high freq filtered noise
+    const cricketSrc = audioCtx.createBufferSource();
+    cricketSrc.buffer = makeWhiteNoise();
+    cricketSrc.loop = true;
+    const cf1 = audioCtx.createBiquadFilter();
+    cf1.type = 'bandpass'; cf1.frequency.value = 4200; cf1.Q.value = 12;
+    const cf2 = audioCtx.createBiquadFilter();
+    cf2.type = 'bandpass'; cf2.frequency.value = 6800; cf2.Q.value = 8;
+    cricketGain = audioCtx.createGain();
+    cricketGain.gain.value = 0;
+    cricketSrc.connect(cf1); cf1.connect(cricketGain);
+    cricketSrc.connect(cf2); cf2.connect(cricketGain);
+    cricketGain.connect(masterGain);
+    cricketSrc.start();
+
+    // Fade in
+    masterGain.gain.setTargetAtTime(0.7, audioCtx.currentTime, 1.5);
+
+  } catch(e) {}
+}
+
+document.addEventListener('click', initAudio, { once: true });
+document.addEventListener('touchstart', initAudio, { once: true });
+setTimeout(initAudio, 800);
+
+// ── RESIZE ──
+function resize() {
+  W = C.width = window.innerWidth;
+  H = C.height = window.innerHeight;
+  reeds.forEach(r => r.init());
+  // Reset firefly positions
+  fireflies.forEach(f => {
+    f.x = Math.random() * W;
+    f.y = H * 0.3 + Math.random() * H * 0.4;
+  });
+}
+window.addEventListener('resize', resize);
+
+// ── DRAW SKY ──
+function drawSky(tod) {
+  // Multi-stop gradient for dusk depth
+  const g = ctx.createLinearGradient(0, 0, 0, H * 0.72);
+  g.addColorStop(0, `hsl(${tod.skyTop[0]},${tod.skyTop[1]}%,${tod.skyTop[2]}%)`);
+  g.addColorStop(0.45, `hsl(${tod.skyMid[0]},${tod.skyMid[1]}%,${tod.skyMid[2]}%)`);
+  g.addColorStop(0.82, `hsl(${tod.skyBot[0]},${tod.skyBot[1]}%,${tod.skyBot[2]}%)`);
+  g.addColorStop(1, `hsl(${tod.groundH},${tod.groundS}%,${tod.groundL}%)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// ── DRAW SUN/GLOW ──
+function drawHorizonGlow(tod) {
+  if(tod.rimLight < 0.1) return;
+  const sunX = W * 0.72;
+  const sunY = H * 0.62;
+  const g = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, H * 0.55);
+  g.addColorStop(0, `rgba(255,200,100,${tod.rimLight * 0.35})`);
+  g.addColorStop(0.3, `rgba(255,140,60,${tod.rimLight * 0.18})`);
+  g.addColorStop(0.7, `rgba(200,80,40,${tod.rimLight * 0.06})`);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// ── DRAW GROUND ──
+function drawGround(tod) {
+  const groundY = H * 0.72;
+  const g = ctx.createLinearGradient(0, groundY, 0, H);
+  g.addColorStop(0, `hsl(${tod.groundH},${tod.groundS}%,${tod.groundL + 4}%)`);
+  g.addColorStop(0.4, `hsl(${tod.groundH},${tod.groundS + 5}%,${tod.groundL}%)`);
+  g.addColorStop(1, `hsl(${tod.groundH},${tod.groundS + 8}%,${tod.groundL - 4}%)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, groundY, W, H - groundY);
+
+  // Ground fog / atmosphere
+  if(tod.fogAlpha > 0) {
+    const fg = ctx.createLinearGradient(0, groundY - H * 0.08, 0, groundY + H * 0.15);
+    fg.addColorStop(0, 'rgba(0,0,0,0)');
+    fg.addColorStop(0.5, `rgba(${tod.fogColor[0]},${tod.fogColor[1]},${tod.fogColor[2]},${tod.fogAlpha * 0.4})`);
+    fg.addColorStop(1, `rgba(${tod.fogColor[0]},${tod.fogColor[1]},${tod.fogColor[2]},${tod.fogAlpha})`);
+    ctx.fillStyle = fg;
+    ctx.fillRect(0, groundY - H * 0.08, W, H * 0.23);
+  }
+}
+
+// ── DRAW STARS ──
+function drawStars(tod) {
+  if(tod.starAlpha < 0.05) return;
+  const t = frame * 0.001;
+  stars.forEach(s => {
+    const twinkle = 0.5 + Math.sin(t * 1.3 + s.tw) * 0.5;
+    ctx.fillStyle = `rgba(255,255,255,${tod.starAlpha * twinkle})`;
+    ctx.beginPath();
+    ctx.arc(s.x * W, s.y * H, s.s * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// ── DRAW REFLECTION ──
+function drawGroundReflection(tod) {
+  if(tod.rimLight < 0.3) return;
+  const groundY = H * 0.72;
+  // Subtle warm reflection on wet ground
+  const refGrad = ctx.createLinearGradient(W * 0.55, groundY, W * 0.9, groundY + H * 0.08);
+  refGrad.addColorStop(0, `rgba(255,180,80,${tod.rimLight * 0.12})`);
+  refGrad.addColorStop(1, 'rgba(255,180,80,0)');
+  ctx.fillStyle = refGrad;
+  ctx.fillRect(W * 0.4, groundY, W * 0.6, H * 0.1);
+}
+
+// ── MYCELIUM ──
+function updateMycelium() {
+  myceliumTimer++;
+  if(myceliumTimer % 90 !== 0) return;
+  myceliumLines.length = 0;
+
+  // Connect nearby reeds with faint threads — only at night/dusk
+  const tod = getTimeOfDay();
+  if(tod.rimLight > 0.7) return; // too bright
+
+  for(let i = 0; i < reeds.length; i++) {
+    for(let j = i + 1; j < reeds.length; j++) {
+      const a = reeds[i], b = reeds[j];
+      const d = Math.abs(a.x - b.x);
+      if(d < W * 0.06 && Math.abs(a.z - b.z) < 0.2) {
+        const alpha = (1 - d / (W * 0.06)) * 0.18 * (1 - tod.rimLight);
+        myceliumLines.push({ x1: a.x, y1: a.baseY, x2: b.x, y2: b.baseY, alpha });
+      }
+    }
+  }
+}
+
+function drawMycelium() {
+  if(stillTimer < 180 || myceliumLines.length === 0) return; // only visible when still for 3s
+  const fadeIn = Math.min(1, (stillTimer - 180) / 120);
+  const t = frame * 0.003;
+  myceliumLines.forEach(ln => {
+    const pulse = 0.6 + Math.sin(t + ln.x1 * 0.01) * 0.4;
+    ctx.beginPath();
+    ctx.moveTo(ln.x1, ln.y1);
+    // Slight curve
+    const mx = (ln.x1 + ln.x2) / 2;
+    const my = (ln.y1 + ln.y2) / 2 - 8;
+    ctx.quadraticCurveTo(mx, my, ln.x2, ln.y2);
+    ctx.strokeStyle = `rgba(140,220,160,${ln.alpha * pulse * fadeIn})`;
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+  });
+}
+
+// ── MAIN LOOP ──
+function render() {
+  frame++;
+
+  const tod = getTimeOfDay();
+
+  // Clear
+  ctx.clearRect(0, 0, W, H);
+
+  // Sky layers
+  drawSky(tod);
+  drawStars(tod);
+  drawHorizonGlow(tod);
+
+  // Rain
+  if(isRaining) {
+    reeds.sort(() => 0); // keep order
+    rainDrops.forEach(r => { r.update(); r.draw(); });
+  }
+
+  // Ground
+  drawGround(tod);
+  drawGroundReflection(tod);
+
+  // Mycelium (underground, near base of reeds)
+  drawMycelium();
+
+  // Reeds — sorted by z (far to close)
+  reeds.forEach(r => { r.update(); r.draw(tod, tod.fogAlpha); });
+
+  // Fireflies (only at dusk/night)
+  if(tod.fireflyAlpha > 0.1) {
+    fireflies.forEach(f => { f.update(); f.draw(tod.fireflyAlpha); });
+  }
+
+  // Cursor light pool — very subtle
+  if(mx > 0) {
+    const cg = ctx.createRadialGradient(mx, my, 0, mx, my, 80);
+    cg.addColorStop(0, 'rgba(255,220,160,0.04)');
+    cg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = cg;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Vignette
+  const vig = ctx.createRadialGradient(W/2, H/2, H * 0.25, W/2, H/2, H * 0.9);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // Film grain
+  if(frame % 3 === 0) {
+    for(let i = 0; i < 800; i++) {
+      const gx = Math.random() * W;
+      const gy = Math.random() * H;
+      const ga = Math.random() * 0.028;
+      ctx.fillStyle = `rgba(255,255,255,${ga})`;
+      ctx.fillRect(gx, gy, 1, 1);
+    }
+  }
+
+  // Wind decay
+  windForce *= 0.95;
+
+  // Still timer
+  const moved = Math.abs(mx - prevMx) + Math.abs(my - prevMy);
+  if(moved < 2 && mx > 0) {
+    stillTimer++;
+  } else {
+    stillTimer = Math.max(0, stillTimer - 3);
+  }
+  prevMx = mx; prevMy = my;
+
+  // Rain timer
+  rainTimer++;
+  if(!isRaining && rainTimer > 600 + Math.random() * 1800) {
+    isRaining = true;
+    rainDuration = 200 + Math.random() * 400;
+    rainTimer = 0;
+    rainAngle = 0.1 + Math.random() * 0.15;
+    while(rainDrops.length < 180) rainDrops.push(new RainDrop());
+  }
+  if(isRaining && rainTimer > rainDuration) {
+    isRaining = false;
+    rainTimer = 0;
+    rainDrops.length = 0;
+  }
+
+  // Mycelium
+  updateMycelium();
+
+  // Audio update
+  if(audioReady && audioCtx) {
+    const t = audioCtx.currentTime;
+    const windLevel = 0.06 + windForce * 0.14 + Math.abs(ambientWind) * 0.08;
+    windGain && windGain.gain.setTargetAtTime(windLevel, t, 0.4);
+    rainGain && rainGain.gain.setTargetAtTime(isRaining ? 0.18 : 0, t, 0.8);
+    cricketGain && cricketGain.gain.setTargetAtTime(tod.fireflyAlpha * 0.04, t, 2.0);
+  }
+
+  requestAnimationFrame(render);
+}
+
+// ── INIT ──
+function init() {
+  // Create reeds with z-depth distribution
+  reeds.length = 0;
+  // Far layer (z=0-0.3)
+  for(let i = 0; i < REED_COUNT * 0.35; i++) {
+    const r = new Reed(Math.random() * W, Math.random() * 0.3);
+    reeds.push(r);
+  }
+  // Mid layer (z=0.3-0.65)
+  for(let i = 0; i < REED_COUNT * 0.4; i++) {
+    const r = new Reed(Math.random() * W, 0.3 + Math.random() * 0.35);
+    reeds.push(r);
+  }
+  // Close layer (z=0.65-1)
+  for(let i = 0; i < REED_COUNT * 0.25; i++) {
+    const r = new Reed(Math.random() * W, 0.65 + Math.random() * 0.35);
+    reeds.push(r);
+  }
+  // Sort far to close
+  reeds.sort((a, b) => a.z - b.z);
+
+  // Fireflies
+  fireflies.length = 0;
+  for(let i = 0; i < 22; i++) fireflies.push(new Firefly());
+
+  resize();
+  render();
+}
+
+// ── EVENTS ──
+document.addEventListener('mousemove', e => {
+  const speed = Math.hypot(e.clientX - mx, e.clientY - my);
+  windForce = Math.min(1, windForce + speed * 0.003);
+  mx = e.clientX;
+  my = e.clientY;
 });
-canvas.addEventListener('pointerdown',()=>{mouse.down=true});
-window.addEventListener('pointerup',()=>{mouse.down=false});
-canvas.addEventListener('click',e=>{
-  if(plants.length<cfg.maxPlants&&mouse.y>terrainHeight(mouse.x)-30){
-    const z=clamp(rand(0,1),0,1),baby=new Plant(mouse.x,z);
-    let parent=null,best=Infinity;
-    for(const p of plants){const d=Math.abs(p.x-mouse.x);if(d<best){best=d;parent=p}}
-    if(parent)baby.dna=new DNA(parent.dna);
-    plants.push(baby);plants.sort((a,b)=>a.z-b.z);
-    for(let i=0;i<10;i++)weather.addParticle(mouse.x,terrainHeight(mouse.x),'pollen',baby.dna.flowerHue);
-  }
-});
+document.addEventListener('touchmove', e => {
+  const t = e.touches[0];
+  const speed = Math.hypot(t.clientX - mx, t.clientY - my);
+  windForce = Math.min(1, windForce + speed * 0.003);
+  mx = t.clientX;
+  my = t.clientY;
+  e.preventDefault();
+}, { passive: false });
 
-document.getElementById('sound-btn').addEventListener('click',()=>audio.toggle());
-
-// Entry flow
-let entered=false;
-function enter(){
-  if(entered)return;entered=true;
-  audio.init();audio.toggle();
-  const entry=document.getElementById('entry');
-  entry.classList.add('fade');
-  setTimeout(()=>{entry.style.display='none'},2000);
-  document.getElementById('ui').classList.add('visible');
-  document.getElementById('sound-btn').classList.add('show');
-  setTimeout(()=>document.getElementById('hint').classList.add('fade-out'),6000);
-}
-document.getElementById('entry').addEventListener('click',enter);
-document.getElementById('entry-btn').addEventListener('click',e=>{e.stopPropagation();enter()});
-
-function loop(){
-  sm.update();wind.update();audio.update();weather.update();mycelium.update();
-  ctx.clearRect(0,0,W,H);
-  drawSky();drawCelestial();drawTerrain();
-  const season=seasons[sm.idx].name;
-  const cursorGlow=ctx.createRadialGradient(mouse.x,mouse.y,0,mouse.x,mouse.y,90);
-  cursorGlow.addColorStop(0,'rgba(255,250,220,0.06)');cursorGlow.addColorStop(1,'rgba(255,250,220,0)');
-  ctx.fillStyle=cursorGlow;ctx.beginPath();ctx.arc(mouse.x,mouse.y,90,0,Math.PI*2);ctx.fill();
-  for(const m of memories)m.draw(ctx,season);
-  if(plants.length<cfg.maxPlants*.5&&season!=='Winter'&&Math.random()<.012){
-    const x=rand(30,W-30),z=rand(0,1);let parent=null,best=Infinity;
-    for(const p of plants){const d=Math.abs(p.x-x);if(d<best){best=d;parent=p}}
-    plants.push(new Plant(x,z,parent?new DNA(parent.dna):null));plants.sort((a,b)=>a.z-b.z);
-  }
-  const deadSkeletons=[];
-  for(let i=0;i<plants.length;i++){
-    const p=plants[i],d=Math.hypot(p.x-mouse.x,p.y-mouse.y);
-    p.update(season,d);
-    if(p.dead){if(season==='Winter')deadSkeletons.push(p);else{memories.push(new Memory(p.x,p.z,p.y,p.name,sm.frame));if(memories.length>cfg.maxMemories)memories.shift()}plants.splice(i,1);i--}
-    else p.draw(ctx,season);
-  }
-  for(const s of deadSkeletons)s.drawSkeleton(ctx);
-  mycelium.draw(ctx);weather.draw(ctx);
-  for(const b of bees){b.update();b.draw(ctx)}
-  for(const f of fireflies){f.update();f.draw(ctx)}
-  mouse.windBoost*=.96;
-  if(entered)updateUI();
-  requestAnimationFrame(loop);
-}
-
-resize();spawnPlants();spawnBees();loop();
+init();
 </script>
 </body>
 </html>
