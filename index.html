@@ -24,14 +24,24 @@ canvas{position:fixed;inset:0;display:block}
   letter-spacing:.25em;text-transform:uppercase;
   color:rgba(210,200,180,.1);pointer-events:none;white-space:nowrap;
 }
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300&display=swap');
 </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300&display=swap" rel="stylesheet">
 </head>
 <body>
 <canvas id="c"></canvas>
 <a id="back" href="https://hydrogenbondss.github.io/jeffreytse/">← Portfolio</a>
 <div id="sig">Jeffrey N. Tse &nbsp;·&nbsp; 2026</div>
 
+<script>
+window.onerror = function(msg, src, line, col, err) {
+  var d = document.createElement('div');
+  d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ff0044;color:#fff;padding:10px;z-index:9999;font:11px monospace;white-space:pre';
+  d.textContent = 'ERROR: ' + msg + ' (line ' + line + ')\n' + (err && err.stack ? err.stack.split('\n').slice(0,3).join('\n') : '');
+  document.body.appendChild(d);
+};
+</script>
 <script>
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
