@@ -46,7 +46,7 @@ const N=85;
 const stars=Array.from({length:120},()=>({
   x:Math.random(),y:Math.random()*.52,
   r:.1+Math.random()*.8,
-  a:.04+Math.random()*.28,
+  a:.06+Math.random()*.38,
   tw:Math.random()*Math.PI*2,
   sp:.2+Math.random()*.5
 }));
@@ -65,8 +65,8 @@ class Reed{
   init(){
     const zs=.38+this.z*.62;
     this.baseY=H*(.69+this.z*.07);
-    this.h=(H*.21+Math.random()*H*.13)*zs;
-    this.thick=(1+Math.random()*2.2)*zs;
+    this.h=(H*.16+Math.random()*H*.18)*zs;
+    this.thick=(.6+Math.random()*2.8)*zs;
     this.headH=(5+Math.random()*7)*zs;
     this.headW=(2.2+Math.random()*2.2)*zs;
   }
@@ -240,7 +240,7 @@ function render(){
 
   // Stars with gentle twinkle
   stars.forEach(s=>{
-    const tw=.5+.5*Math.sin(t*s.sp+s.tw);
+    const tw=.3+.7*Math.sin(t*s.sp+s.tw);
     ctx.fillStyle=`rgba(200,210,230,${s.a*tw})`;
     ctx.beginPath();ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);ctx.fill();
   });
@@ -253,20 +253,36 @@ function render(){
   // Rain
   if(raining)drops.forEach(d=>{d.update();d.draw();});
 
-  // Ground — dark, textured
+  // Ground — dark with subtle texture
   const gnd=ctx.createLinearGradient(0,H*.68,0,H);
   gnd.addColorStop(0,'hsl(222,22%,6%)');
   gnd.addColorStop(.4,'hsl(220,20%,4%)');
   gnd.addColorStop(1,'hsl(220,18%,3%)');
   ctx.fillStyle=gnd;ctx.fillRect(0,H*.68,W,H*.32);
+  // Subtle ground texture — horizontal variation
+  for(let gi=0;gi<8;gi++){
+    const gy=H*(.72+gi*.04);
+    const ga=.015+Math.random()*.02;
+    ctx.fillStyle=`rgba(255,255,255,${ga})`;
+    ctx.fillRect(Math.random()*W*.3,gy,W*(.4+Math.random()*.4),.5);
+  }
 
-  // Ground mist — subtle layered fog
-  [.04,.08,.12].forEach((a,i)=>{
-    const fg=ctx.createLinearGradient(0,H*(.60+i*.04),0,H*(.76+i*.04));
+  // Ground mist — layered atmospheric fog
+  [.03,.06,.1,.15].forEach((a,i)=>{
+    const fg=ctx.createLinearGradient(0,H*(.58+i*.05),0,H*(.78+i*.04));
     fg.addColorStop(0,'rgba(0,0,0,0)');
-    fg.addColorStop(1,`rgba(15,20,45,${a})`);
-    ctx.fillStyle=fg;ctx.fillRect(0,H*(.60+i*.04),W,H*.2);
+    fg.addColorStop(.6,`rgba(10,15,35,${a*.5})`);
+    fg.addColorStop(1,`rgba(15,22,50,${a})`);
+    ctx.fillStyle=fg;ctx.fillRect(0,H*(.58+i*.05),W,H*.22);
   });
+  // Horizontal mist wisps
+  for(let mi=0;mi<3;mi++){
+    const my=H*(.68+mi*.05);
+    const mg=ctx.createRadialGradient(W*(0.2+mi*.3),my,0,W*(0.2+mi*.3),my,W*.3);
+    mg.addColorStop(0,`rgba(20,30,60,.06)`);
+    mg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=mg;ctx.fillRect(0,my-H*.05,W,H*.1);
+  }
 
   // Mycelium
   drawMycel();
