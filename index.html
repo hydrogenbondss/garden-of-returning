@@ -4,139 +4,131 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Garden of Returning — Jeffrey N. Tse</title>
-<meta name="description" content="A reed field at dusk. Move through it.">
+<meta name="description" content="A reed field. Move through it.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:#06080f}
+html,body{width:100%;height:100%;overflow:hidden;background:#07080f}
 canvas{position:fixed;inset:0;display:block}
-#ui{position:fixed;inset:0;pointer-events:none;z-index:10}
-#back{
-  position:fixed;top:1.8rem;left:2rem;z-index:20;
-  font-family:'DM Mono',monospace;font-size:.55rem;
-  letter-spacing:.2em;text-transform:uppercase;
-  color:rgba(210,200,180,.25);text-decoration:none;
-  border:1px solid rgba(210,200,180,.1);padding:.5rem 1rem;
-  transition:all .4s;pointer-events:auto;
-}
-#back:hover{color:rgba(210,200,180,.8);border-color:rgba(210,200,180,.3)}
-#sig{
-  position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);
-  font-family:'DM Mono',monospace;font-size:.5rem;
-  letter-spacing:.25em;text-transform:uppercase;
-  color:rgba(210,200,180,.1);pointer-events:none;white-space:nowrap;
-}
-#hint{
-  position:fixed;bottom:2rem;right:2rem;
-  font-family:'DM Mono',monospace;font-size:.48rem;
-  letter-spacing:.12em;color:rgba(210,200,180,.18);
-  pointer-events:none;text-align:right;line-height:1.8;
-}
+#back{position:fixed;top:1.8rem;left:2rem;z-index:20;font-family:'DM Mono',monospace;font-size:.55rem;letter-spacing:.2em;text-transform:uppercase;color:rgba(200,210,230,.18);text-decoration:none;border:1px solid rgba(200,210,230,.08);padding:.5rem 1rem;transition:all .4s}
+#back:hover{color:rgba(200,210,230,.7);border-color:rgba(200,210,230,.25)}
+#sig{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);font-family:'DM Mono',monospace;font-size:.48rem;letter-spacing:.25em;text-transform:uppercase;color:rgba(200,210,230,.08);pointer-events:none;white-space:nowrap}
+#hint{position:fixed;bottom:2rem;right:2rem;font-family:'DM Mono',monospace;font-size:.46rem;letter-spacing:.1em;color:rgba(200,210,230,.15);pointer-events:none;text-align:right;line-height:1.9}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <a id="back" href="https://hydrogenbondss.github.io/jeffreytse/">← Portfolio</a>
-<div id="sig">Jeffrey N. Tse &nbsp;·&nbsp; 2026</div>
-<div id="hint">Move to create wind<br>Be still to see beneath</div>
+<div id="sig">Jeffrey N. Tse · 2026</div>
+<div id="hint">Move — wind follows<br>Still — something else appears</div>
 <script>
-const C=document.getElementById('c');
-const ctx=C.getContext('2d');
-let W=C.width=window.innerWidth;
-let H=C.height=window.innerHeight;
+// ── RETINA CANVAS ──
+const C = document.getElementById('c');
+const DPR = window.devicePixelRatio || 1;
+let W = window.innerWidth, H = window.innerHeight;
+function resizeCanvas(){
+  W=window.innerWidth; H=window.innerHeight;
+  C.width=W*DPR; C.height=H*DPR;
+  C.style.width=W+'px'; C.style.height=H+'px';
+}
+resizeCanvas();
+const ctx = C.getContext('2d');
+ctx.scale(DPR, DPR);
+
 let mx=-1,my=-1,pmx=-1,pmy=-1;
-let windForce=0,ambientWind=0;
-let frame=0,stillFrames=0;
+let windForce=0, frame=0, stillFrames=0;
 const reeds=[];
-const REED_N=90;
+const N=85;
 
-// ── SKY PALETTE: cool blue-grey dusk, NOT orange ──
-const SKY={
-  top:[12,15,28],    // deep blue-black
-  mid:[22,28,52],    // indigo
-  hor:[32,38,68],    // slightly lighter at horizon
-  gnd:[8,10,16]      // very dark ground
-};
+// ── STARS ──
+const stars=Array.from({length:120},()=>({
+  x:Math.random(),y:Math.random()*.52,
+  r:.1+Math.random()*.8,
+  a:.04+Math.random()*.28,
+  tw:Math.random()*Math.PI*2,
+  sp:.2+Math.random()*.5
+}));
 
-// ── REED CLASS ──
+// ── REED ──
 class Reed{
   constructor(x,z){
     this.x=x; this.z=z;
     this.sway=0; this.vel=0;
-    this.hue=28+Math.random()*20;
-    this.sat=15+Math.random()*20;
-    this.lgt=18+Math.random()*14;
     this.phase=Math.random()*Math.PI*2;
-    this.hasHead=Math.random()>.25;
+    this.hue=30+Math.random()*18;
+    this.lgt=16+Math.random()*12;
+    this.hasHead=Math.random()>.28;
     this.init();
   }
   init(){
-    const zs=.4+this.z*.6;
-    this.baseY=H*(.70+this.z*.06);
-    this.h=(H*.22+Math.random()*H*.12)*zs;
-    this.thick=(1+Math.random()*2)*zs;
+    const zs=.38+this.z*.62;
+    this.baseY=H*(.69+this.z*.07);
+    this.h=(H*.21+Math.random()*H*.13)*zs;
+    this.thick=(1+Math.random()*2.2)*zs;
     this.headH=(5+Math.random()*7)*zs;
-    this.headW=(2+Math.random()*2.5)*zs;
+    this.headW=(2.2+Math.random()*2.2)*zs;
   }
   update(){
-    const zs=.4+this.z*.6;
-    const amb=Math.sin(frame*.009+this.phase)*.09+Math.sin(frame*.022+this.phase*1.7)*.04;
-    let cWind=0;
+    const amb=Math.sin(frame*.009+this.phase)*.09+Math.sin(frame*.021+this.phase*1.8)*.04;
+    let cw=0;
     if(mx>0){
       const dx=mx-this.x;
-      const inf=Math.max(0,1-Math.abs(dx)/(W*.2));
-      const spd=(mx-pmx)*.004;
-      cWind=inf*windForce*.7*Math.sign(spd||1);
+      const inf=Math.max(0,1-Math.abs(dx)/(W*.18));
+      const spd=(mx-pmx)*.003;
+      cw=inf*windForce*.75*Math.sign(spd||1);
     }
-    const target=amb+cWind;
-    this.vel+=(target-this.sway)*.045;
-    this.vel*=.86;
-    this.sway=Math.max(-.5,Math.min(.5,this.sway+this.vel));
+    const target=amb+cw;
+    this.vel+=(target-this.sway)*.042;
+    this.vel*=.87;
+    this.sway=Math.max(-.48,Math.min(.48,this.sway+this.vel));
   }
   draw(){
-    const zs=.4+this.z*.6;
     const sw=this.sway*this.h;
     const cp1x=sw*.2,cp1y=-this.h*.38;
     const cp2x=sw*.62,cp2y=-this.h*.72;
     const ex=sw,ey=-this.h;
+    const zs=.38+this.z*.62;
 
     ctx.save();
     ctx.translate(this.x,this.baseY);
 
-    // Stalk — use solid color with slight lighting variation
-    // Left side darker (shadow), right side catches ambient sky light
+    // Base stalk — vary opacity along length (darker base, lighter tip)
+    const grad=ctx.createLinearGradient(0,0,ex,ey);
     const l=this.lgt;
-    ctx.beginPath();
-    ctx.moveTo(0,0);
+    grad.addColorStop(0,`hsla(${this.hue},18%,${l*.7}%,.65)`);
+    grad.addColorStop(.45,`hsla(${this.hue},20%,${l}%,.8)`);
+    grad.addColorStop(1,`hsla(${this.hue},22%,${l+12}%,.7)`);
+
+    ctx.beginPath();ctx.moveTo(0,0);
     ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,ex,ey);
-    ctx.strokeStyle=`hsla(${this.hue},${this.sat}%,${l}%,.85)`;
-    ctx.lineWidth=this.thick;
-    ctx.lineCap='round';
-    ctx.stroke();
+    ctx.strokeStyle=grad;
+    ctx.lineWidth=this.thick;ctx.lineCap='round';ctx.stroke();
 
-    // Right rim light — subtle blue-white from sky
-    ctx.beginPath();
-    ctx.moveTo(this.thick*.3,0);
-    ctx.bezierCurveTo(cp1x+this.thick*.4,cp1y,cp2x+this.thick*.35,cp2y,ex+this.thick*.25,ey);
-    ctx.strokeStyle=`rgba(160,180,220,${.06*this.z})`;
-    ctx.lineWidth=this.thick*.3;
-    ctx.stroke();
+    // Atmospheric rim — blue-silver from sky, only on closer reeds
+    if(this.z>.45){
+      ctx.beginPath();ctx.moveTo(this.thick*.3,0);
+      ctx.bezierCurveTo(cp1x+this.thick*.35,cp1y,cp2x+this.thick*.3,cp2y,ex+this.thick*.22,ey);
+      ctx.strokeStyle=`rgba(140,165,210,${.05*this.z})`;
+      ctx.lineWidth=this.thick*.28;ctx.stroke();
+    }
 
-    // Cattail head
+    // Cattail
     if(this.hasHead){
-      const hx=ex*.85+cp2x*.15;
-      const hy=ey*.85+cp2y*.15;
+      const hx=ex*.84+cp2x*.16;
+      const hy=ey*.84+cp2y*.16;
+      // Tapered ellipse
       ctx.beginPath();
-      ctx.ellipse(hx,hy-this.headH*.5,this.headW,this.headH*.5,this.sway*.2,0,Math.PI*2);
-      ctx.fillStyle=`hsla(20,30%,16%,.9)`;
-      ctx.fill();
-      // Subtle rim on head
-      ctx.beginPath();
-      ctx.ellipse(hx+this.headW*.4,hy-this.headH*.5,this.headW*.15,this.headH*.44,this.sway*.2,0,Math.PI*2);
-      ctx.fillStyle=`rgba(140,165,210,.1)`;
-      ctx.fill();
+      ctx.ellipse(hx,hy-this.headH*.45,this.headW*.38*zs,this.headH*.45,this.sway*.18,0,Math.PI*2);
+      ctx.fillStyle=`hsla(22,25%,14%,.92)`;ctx.fill();
+      // Hair fibers at top
+      for(let i=0;i<4;i++){
+        const fx=hx+(Math.random()-.5)*this.headW*.6;
+        const fy=hy-this.headH*.9-Math.random()*this.headH*.4;
+        ctx.beginPath();ctx.moveTo(fx,hy-this.headH*.9);ctx.lineTo(fx+(Math.random()-.5)*3,fy);
+        ctx.strokeStyle=`rgba(180,170,140,.3)`;ctx.lineWidth=.4;ctx.stroke();
+      }
     }
     ctx.restore();
   }
@@ -144,60 +136,62 @@ class Reed{
 
 // ── RAIN ──
 const drops=[];
-let raining=false,rainTimer=0,rainDur=0;
+let raining=false,rainT=0,rainDur=0;
 class Drop{
   constructor(){this.reset();}
-  reset(){this.x=Math.random()*W*1.2-W*.1;this.y=Math.random()*H*.3-H*.05;this.l=10+Math.random()*14;this.s=12+Math.random()*7;this.a=.1+Math.random()*.18;}
-  update(){this.x+=this.s*.12;this.y+=this.s;if(this.y>H+20)this.reset();}
-  draw(){
-    ctx.beginPath();ctx.moveTo(this.x,this.y);ctx.lineTo(this.x+this.l*.12,this.y+this.l);
-    ctx.strokeStyle=`rgba(160,180,220,${this.a})`;ctx.lineWidth=.7;ctx.stroke();
-  }
+  reset(){this.x=Math.random()*W*1.15-W*.08;this.y=Math.random()*H*.3;this.l=9+Math.random()*13;this.s=11+Math.random()*7;this.a=.08+Math.random()*.15;}
+  update(){this.x+=this.s*.1;this.y+=this.s;if(this.y>H+20)this.reset();}
+  draw(){ctx.beginPath();ctx.moveTo(this.x,this.y);ctx.lineTo(this.x+this.l*.1,this.y+this.l);ctx.strokeStyle=`rgba(150,175,220,${this.a})`;ctx.lineWidth=.65;ctx.stroke();}
 }
 
 // ── MYCELIUM ──
 const mycelLines=[];
-let mycelTimer=0;
+let mycelT=0;
 function updateMycel(){
-  mycelTimer++;
-  if(mycelTimer%240!==0)return;
+  mycelT++;
+  if(mycelT%300!==0)return;
   mycelLines.length=0;
   reeds.forEach((a,i)=>{
     reeds.slice(i+1).forEach(b=>{
       const d=Math.abs(a.x-b.x);
-      if(d<W*.055&&Math.abs(a.z-b.z)<.25){
-        mycelLines.push({x1:a.x,y1:a.baseY,x2:b.x,y2:b.baseY,a:(1-d/(W*.055))*.15});
-      }
+      if(d<W*.05&&Math.abs(a.z-b.z)<.22)
+        mycelLines.push({x1:a.x,y1:a.baseY,x2:b.x,y2:b.baseY,a:(1-d/(W*.05))*.12});
     });
   });
 }
 function drawMycel(){
-  if(stillFrames<200||mycelLines.length===0)return;
-  const fade=Math.min(1,(stillFrames-200)/120);
-  const t=frame*.002;
+  if(stillFrames<240)return;
+  const fade=Math.min(1,(stillFrames-240)/180);
+  const t=frame*.0015;
   mycelLines.forEach(ln=>{
-    const p=.5+.5*Math.sin(t+ln.x1*.008);
+    const p=.5+.5*Math.sin(t+ln.x1*.006);
     ctx.beginPath();ctx.moveTo(ln.x1,ln.y1);
-    const mx2=(ln.x1+ln.x2)/2,my2=(ln.y1+ln.y2)/2-6;
-    ctx.quadraticCurveTo(mx2,my2,ln.x2,ln.y2);
-    ctx.strokeStyle=`rgba(100,200,140,${ln.a*p*fade})`;ctx.lineWidth=.6;ctx.stroke();
+    ctx.quadraticCurveTo((ln.x1+ln.x2)/2,(ln.y1+ln.y2)/2-8,ln.x2,ln.y2);
+    ctx.strokeStyle=`rgba(80,190,120,${ln.a*p*fade})`;ctx.lineWidth=.55;ctx.stroke();
   });
 }
 
-// ── STARS ──
-const stars=Array.from({length:140},()=>({
-  x:Math.random(),y:Math.random()*.55,
-  r:.15+Math.random()*.9,
-  a:.04+Math.random()*.3,
-  tw:Math.random()*Math.PI*2,
-  sp:.15+Math.random()*.4
+// ── FIREFLIES — appear when very still ──
+const flies=Array.from({length:18},()=>({
+  x:Math.random()*W,y:H*.28+Math.random()*H*.42,
+  vx:(Math.random()-.5)*.5,vy:(Math.random()-.5)*.35,
+  phase:Math.random()*Math.PI*2,ps:.025+Math.random()*.04,r:1.2+Math.random()*1.3
 }));
-function drawStars(){
+function drawFlies(){
+  if(stillFrames<400)return;
+  const fade=Math.min(1,(stillFrames-400)/300);
   const t=frame*.001;
-  stars.forEach(s=>{
-    const tw=.5+.5*Math.sin(t*s.sp+s.tw);
-    ctx.fillStyle=`rgba(200,210,230,${s.a*tw})`;
-    ctx.beginPath();ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);ctx.fill();
+  flies.forEach(f=>{
+    f.vx+=(Math.random()-.5)*.04;f.vy+=(Math.random()-.5)*.03;
+    f.vx*=.98;f.vy*=.98;
+    f.x=(f.x+f.vx+W)%W;f.y=Math.max(H*.2,Math.min(H*.75,f.y+f.vy));
+    const glow=Math.max(0,Math.sin(t*f.ps*80+f.phase));
+    if(glow<.05)return;
+    const al=glow*fade*.75;
+    const rg=ctx.createRadialGradient(f.x,f.y,0,f.x,f.y,f.r*7);
+    rg.addColorStop(0,`rgba(180,255,120,${al})`);rg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=rg;ctx.beginPath();ctx.arc(f.x,f.y,f.r*7,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=`rgba(210,255,160,${al})`;ctx.beginPath();ctx.arc(f.x,f.y,f.r,0,Math.PI*2);ctx.fill();
   });
 }
 
@@ -209,109 +203,107 @@ function initAudio(){
     actx=new(window.AudioContext||window.webkitAudioContext)();
     mGain=actx.createGain();mGain.gain.value=0;mGain.connect(actx.destination);
     const rate=actx.sampleRate;
-    function noise(len,type){
-      const buf=actx.createBuffer(1,len,rate);const d=buf.getChannelData(0);
-      if(type==='brown'){let l=0;for(let i=0;i<len;i++){const w=Math.random()*2-1;l=(l+.02*w)/1.02;d[i]=l*3.5;}}
-      else{for(let i=0;i<len;i++)d[i]=Math.random()*2-1;}
-      return buf;
-    }
-    // Wind
-    const ws=actx.createBufferSource();ws.buffer=noise(rate*4,'brown');ws.loop=true;
-    const wf=actx.createBiquadFilter();wf.type='lowpass';wf.frequency.value=300;
-    wGain=actx.createGain();wGain.gain.value=.06;
+    function brown(len){const b=actx.createBuffer(1,len,rate);const d=b.getChannelData(0);let l=0;for(let i=0;i<len;i++){const w=Math.random()*2-1;l=(l+.02*w)/1.02;d[i]=l*3.5;}return b;}
+    function white(len){const b=actx.createBuffer(1,len,rate);const d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;return b;}
+    const ws=actx.createBufferSource();ws.buffer=brown(rate*4);ws.loop=true;
+    const wf=actx.createBiquadFilter();wf.type='lowpass';wf.frequency.value=280;
+    wGain=actx.createGain();wGain.gain.value=.05;
     ws.connect(wf);wf.connect(wGain);wGain.connect(mGain);ws.start();
-    // Rain
-    const rs=actx.createBufferSource();rs.buffer=noise(rate*3,'white');rs.loop=true;
-    const rf=actx.createBiquadFilter();rf.type='bandpass';rf.frequency.value=700;rf.Q.value=.7;
+    const rs=actx.createBufferSource();rs.buffer=white(rate*3);rs.loop=true;
+    const rf=actx.createBiquadFilter();rf.type='bandpass';rf.frequency.value=650;rf.Q.value=.8;
     rGain=actx.createGain();rGain.gain.value=0;
     rs.connect(rf);rf.connect(rGain);rGain.connect(mGain);rs.start();
-    // Crickets
-    const cs=actx.createBufferSource();cs.buffer=noise(rate*3,'white');cs.loop=true;
-    const cf=actx.createBiquadFilter();cf.type='bandpass';cf.frequency.value=4800;cf.Q.value=10;
-    cGain=actx.createGain();cGain.gain.value=.025;
+    const cs=actx.createBufferSource();cs.buffer=white(rate*3);cs.loop=true;
+    const cf=actx.createBiquadFilter();cf.type='bandpass';cf.frequency.value=5200;cf.Q.value=9;
+    cGain=actx.createGain();cGain.gain.value=0;
     cs.connect(cf);cf.connect(cGain);cGain.connect(mGain);cs.start();
-    mGain.gain.setTargetAtTime(.75,actx.currentTime,1.5);
+    mGain.gain.setTargetAtTime(.7,actx.currentTime,1.5);
   }catch(e){}
 }
 document.addEventListener('click',initAudio,{once:true});
 document.addEventListener('touchstart',initAudio,{once:true});
-setTimeout(initAudio,600);
+setTimeout(initAudio,500);
 
 // ── RENDER ──
 function render(){
   frame++;
   ctx.clearRect(0,0,W,H);
 
-  // Sky gradient — dark blue-indigo, NOT orange
-  const skyG=ctx.createLinearGradient(0,0,0,H*.75);
-  skyG.addColorStop(0,`rgb(${SKY.top})`);
-  skyG.addColorStop(.5,`rgb(${SKY.mid})`);
-  skyG.addColorStop(.85,`rgb(${SKY.hor})`);
-  skyG.addColorStop(1,`rgb(${SKY.gnd})`);
-  ctx.fillStyle=skyG;ctx.fillRect(0,0,W,H);
+  // Sky — deep blue-indigo, dark
+  const t=frame*.001;
+  const sky=ctx.createLinearGradient(0,0,0,H*.72);
+  sky.addColorStop(0,'hsl(228,35%,5%)');
+  sky.addColorStop(.38,'hsl(225,30%,8%)');
+  sky.addColorStop(.72,'hsl(222,25%,10%)');
+  sky.addColorStop(1,'hsl(220,20%,6%)');
+  ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
 
-  // Stars
-  drawStars();
+  // Stars with gentle twinkle
+  stars.forEach(s=>{
+    const tw=.5+.5*Math.sin(t*s.sp+s.tw);
+    ctx.fillStyle=`rgba(200,210,230,${s.a*tw})`;
+    ctx.beginPath();ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);ctx.fill();
+  });
 
-  // Very subtle horizon glow — cool blue, not warm
-  const hg=ctx.createRadialGradient(W*.5,H*.68,0,W*.5,H*.68,W*.4);
-  hg.addColorStop(0,'rgba(60,80,140,.08)');hg.addColorStop(1,'rgba(0,0,0,0)');
+  // Subtle cool horizon glow
+  const hg=ctx.createRadialGradient(W*.5,H*.7,0,W*.5,H*.7,W*.35);
+  hg.addColorStop(0,'rgba(40,60,120,.06)');hg.addColorStop(1,'rgba(0,0,0,0)');
   ctx.fillStyle=hg;ctx.fillRect(0,0,W,H);
 
   // Rain
   if(raining)drops.forEach(d=>{d.update();d.draw();});
 
-  // Ground
-  const gG=ctx.createLinearGradient(0,H*.68,0,H);
-  gG.addColorStop(0,`hsl(220,25%,7%)`);
-  gG.addColorStop(.5,`hsl(220,22%,5%)`);
-  gG.addColorStop(1,`hsl(220,18%,3%)`);
-  ctx.fillStyle=gG;ctx.fillRect(0,H*.68,W,H*.32);
+  // Ground — dark, textured
+  const gnd=ctx.createLinearGradient(0,H*.68,0,H);
+  gnd.addColorStop(0,'hsl(222,22%,6%)');
+  gnd.addColorStop(.4,'hsl(220,20%,4%)');
+  gnd.addColorStop(1,'hsl(220,18%,3%)');
+  ctx.fillStyle=gnd;ctx.fillRect(0,H*.68,W,H*.32);
 
-  // Ground fog
-  const fg=ctx.createLinearGradient(0,H*.62,0,H*.78);
-  fg.addColorStop(0,'rgba(0,0,0,0)');
-  fg.addColorStop(.5,'rgba(20,30,60,.12)');
-  fg.addColorStop(1,'rgba(20,30,60,.22)');
-  ctx.fillStyle=fg;ctx.fillRect(0,H*.62,W,H*.16);
+  // Ground mist — subtle layered fog
+  [.04,.08,.12].forEach((a,i)=>{
+    const fg=ctx.createLinearGradient(0,H*(.60+i*.04),0,H*(.76+i*.04));
+    fg.addColorStop(0,'rgba(0,0,0,0)');
+    fg.addColorStop(1,`rgba(15,20,45,${a})`);
+    ctx.fillStyle=fg;ctx.fillRect(0,H*(.60+i*.04),W,H*.2);
+  });
 
   // Mycelium
   drawMycel();
 
-  // Reeds back to front
+  // Reeds — sorted far to close
   reeds.forEach(r=>{r.update();r.draw();});
 
-  // Vignette
-  const vig=ctx.createRadialGradient(W/2,H/2,H*.2,W/2,H/2,H*.85);
-  vig.addColorStop(0,'rgba(0,0,0,0)');vig.addColorStop(1,'rgba(0,0,0,.65)');
+  // Fireflies
+  drawFlies();
+
+  // Cursor glow on canvas
+  if(mx>0){
+    const cg=ctx.createRadialGradient(mx,my,0,mx,my,60);
+    cg.addColorStop(0,'rgba(180,200,255,.035)');cg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=cg;ctx.fillRect(0,0,W,H);
+  }
+
+  // Vignette — strong corners
+  const vig=ctx.createRadialGradient(W/2,H/2,H*.22,W/2,H/2,H*.9);
+  vig.addColorStop(0,'rgba(0,0,0,0)');vig.addColorStop(1,'rgba(0,0,0,.68)');
   ctx.fillStyle=vig;ctx.fillRect(0,0,W,H);
 
-  // Wind
   windForce*=.96;
-
-  // Still counter
   const spd=Math.abs(mx-pmx)+Math.abs(my-pmy);
-  if(spd<1&&mx>0)stillFrames++;
-  else stillFrames=Math.max(0,stillFrames-2);
+  stillFrames=spd<1&&mx>0?stillFrames+1:Math.max(0,stillFrames-2);
   pmx=mx;pmy=my;
 
-  // Rain
-  rainTimer++;
-  if(!raining&&rainTimer>500+Math.random()*2000){
-    raining=true;rainDur=150+Math.random()*300;rainTimer=0;
-    while(drops.length<70)drops.push(new Drop());
-  }
-  if(raining&&rainTimer>rainDur){raining=false;rainTimer=0;drops.length=0;}
-
+  rainT++;
+  if(!raining&&rainT>600+Math.random()*2200){raining=true;rainDur=120+Math.random()*280;rainT=0;while(drops.length<65)drops.push(new Drop());}
+  if(raining&&rainT>rainDur){raining=false;rainT=0;drops.length=0;}
   updateMycel();
 
-  // Audio
   if(audioOn&&actx){
-    const t=actx.currentTime;
-    const wl=.05+windForce*.12+Math.abs(ambientWind)*.05;
-    wGain&&wGain.gain.setTargetAtTime(wl,t,.3);
-    rGain&&rGain.gain.setTargetAtTime(raining?.16:0,t,.8);
-    cGain&&cGain.gain.setTargetAtTime(.02+stillFrames/10000,t,2);
+    const at=actx.currentTime;
+    wGain&&wGain.gain.setTargetAtTime(.04+windForce*.1,at,.3);
+    rGain&&rGain.gain.setTargetAtTime(raining?.14:0,at,.7);
+    cGain&&cGain.gain.setTargetAtTime(stillFrames>300?.025:0,at,2);
   }
 
   requestAnimationFrame(render);
@@ -320,33 +312,16 @@ function render(){
 // ── INIT ──
 function init(){
   reeds.length=0;
-  // Far reeds
-  for(let i=0;i<REED_N*.35;i++)reeds.push(new Reed(Math.random()*W,Math.random()*.3));
-  // Mid reeds
-  for(let i=0;i<REED_N*.4;i++)reeds.push(new Reed(Math.random()*W,.3+Math.random()*.35));
-  // Close reeds
-  for(let i=0;i<REED_N*.25;i++)reeds.push(new Reed(Math.random()*W,.65+Math.random()*.35));
+  for(let i=0;i<N*.35;i++) reeds.push(new Reed(Math.random()*W,Math.random()*.3));
+  for(let i=0;i<N*.4;i++) reeds.push(new Reed(Math.random()*W,.3+Math.random()*.35));
+  for(let i=0;i<N*.25;i++) reeds.push(new Reed(Math.random()*W,.65+Math.random()*.35));
   reeds.sort((a,b)=>a.z-b.z);
   render();
 }
 
-window.addEventListener('resize',()=>{
-  W=C.width=window.innerWidth;H=C.height=window.innerHeight;
-  reeds.forEach(r=>r.init());
-});
-document.addEventListener('mousemove',e=>{
-  const spd=Math.hypot(e.clientX-mx,e.clientY-my);
-  windForce=Math.min(1,windForce+spd*.004);
-  mx=e.clientX;my=e.clientY;
-});
-document.addEventListener('touchmove',e=>{
-  const t=e.touches[0];
-  const spd=Math.hypot(t.clientX-mx,t.clientY-my);
-  windForce=Math.min(1,windForce+spd*.004);
-  mx=t.clientX;my=t.clientY;
-  e.preventDefault();
-},{passive:false});
-
+window.addEventListener('resize',()=>{resizeCanvas();ctx.scale(DPR,DPR);reeds.forEach(r=>r.init());});
+document.addEventListener('mousemove',e=>{const spd=Math.hypot(e.clientX-mx,e.clientY-my);windForce=Math.min(1,windForce+spd*.003);mx=e.clientX;my=e.clientY;});
+document.addEventListener('touchmove',e=>{const t=e.touches[0];windForce=Math.min(1,windForce+Math.hypot(t.clientX-mx,t.clientY-my)*.003);mx=t.clientX;my=t.clientY;e.preventDefault();},{passive:false});
 init();
 </script>
 </body>
