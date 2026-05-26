@@ -3,341 +3,687 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Garden of Returning — Jeffrey N. Tse</title>
-<meta name="description" content="A reed field. Move through it.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300&display=swap" rel="stylesheet">
+<title>Garden of Returning</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:#07080f}
-canvas{position:fixed;inset:0;display:block}
-#back{position:fixed;top:1.8rem;left:2rem;z-index:20;font-family:'DM Mono',monospace;font-size:.55rem;letter-spacing:.2em;text-transform:uppercase;color:rgba(200,210,230,.18);text-decoration:none;border:1px solid rgba(200,210,230,.08);padding:.5rem 1rem;transition:all .4s}
-#back:hover{color:rgba(200,210,230,.7);border-color:rgba(200,210,230,.25)}
-#sig{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);font-family:'DM Mono',monospace;font-size:.48rem;letter-spacing:.25em;text-transform:uppercase;color:rgba(200,210,230,.08);pointer-events:none;white-space:nowrap}
-#hint{position:fixed;bottom:2rem;right:2rem;font-family:'DM Mono',monospace;font-size:.46rem;letter-spacing:.1em;color:rgba(200,210,230,.15);pointer-events:none;text-align:right;line-height:1.9}
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; overflow:hidden; background:#0a0e0a; }
+canvas { display:block; position:fixed; inset:0; }
+
+#ui {
+  position:fixed; inset:0; pointer-events:none; z-index:10;
+  display:flex; flex-direction:column; justify-content:space-between;
+  padding:2rem;
+}
+.ui-top {
+  display:flex; justify-content:space-between; align-items:flex-start;
+}
+.ui-title {
+  font-family:'Courier New',monospace; font-size:.58rem; letter-spacing:.25em;
+  text-transform:uppercase; color:rgba(140,190,120,.45);
+  line-height:1.8;
+}
+.ui-coords {
+  font-family:'Courier New',monospace; font-size:.52rem; letter-spacing:.12em;
+  color:rgba(140,190,120,.3); text-align:right;
+}
+.ui-bottom {
+  display:flex; justify-content:space-between; align-items:flex-end;
+}
+.ui-hint {
+  font-family:'Courier New',monospace; font-size:.48rem; letter-spacing:.18em;
+  color:rgba(140,190,120,.25); text-transform:uppercase;
+  animation: hintpulse 3s ease-in-out infinite;
+}
+@keyframes hintpulse { 0%,100%{opacity:.25} 50%{opacity:.55} }
+.ui-year {
+  font-family:'Courier New',monospace; font-size:.48rem; color:rgba(140,190,120,.18);
+}
+
+/* Sound toggle */
+#soundBtn {
+  position:fixed; top:2rem; right:2rem; z-index:20;
+  background:rgba(10,14,10,.7); border:1px solid rgba(140,190,120,.2);
+  color:rgba(140,190,120,.5); font-family:'Courier New',monospace;
+  font-size:.5rem; letter-spacing:.15em; padding:.4rem .8rem;
+  cursor:pointer; pointer-events:all; transition:all .3s; text-transform:uppercase;
+}
+#soundBtn:hover { border-color:rgba(140,190,120,.5); color:rgba(140,190,120,.9); }
+
+/* Loading */
+#loading {
+  position:fixed; inset:0; background:#0a0e0a; z-index:50;
+  display:flex; align-items:center; justify-content:center; flex-direction:column;
+  gap:1.5rem;
+}
+.ld-text { font-family:'Courier New',monospace; font-size:.58rem; letter-spacing:.25em;
+  color:rgba(140,190,120,.45); text-transform:uppercase; }
+.ld-bar { width:200px; height:1px; background:rgba(140,190,120,.1); }
+.ld-fill { height:100%; width:0%; background:rgba(140,190,120,.6); transition:width .3s ease; }
+#loading.out { opacity:0; transition:opacity 1.5s ease; pointer-events:none; }
 </style>
 </head>
 <body>
+
+<div id="loading">
+  <div class="ld-text">Garden of Returning</div>
+  <div class="ld-bar"><div class="ld-fill" id="ldFill"></div></div>
+  <div class="ld-text" id="ldStatus" style="font-size:.42rem;opacity:.5">Rendering city</div>
+</div>
+
 <canvas id="c"></canvas>
-<a id="back" href="https://hydrogenbondss.github.io/jeffreytse/">← Portfolio</a>
-<div id="sig">Jeffrey N. Tse · 2026</div>
-<div id="hint">Move — wind follows<br>Still — something else appears</div>
+
+<div id="ui">
+  <div class="ui-top">
+    <div class="ui-title">Garden of Returning<br>An Overgrown City</div>
+    <div class="ui-coords" id="coords">22.3193° N<br>114.1694° E</div>
+  </div>
+  <div class="ui-bottom">
+    <div class="ui-hint" id="hint">Move cursor to explore — scroll to advance</div>
+    <div class="ui-year">After</div>
+  </div>
+</div>
+
+<button id="soundBtn">Sound off</button>
+
 <script>
-// ── RETINA CANVAS ──
-const C = document.getElementById('c');
-const DPR = window.devicePixelRatio || 1;
-let W = window.innerWidth, H = window.innerHeight;
-function resizeCanvas(){
-  W=window.innerWidth; H=window.innerHeight;
-  C.width=W*DPR; C.height=H*DPR;
-  C.style.width=W+'px'; C.style.height=H+'px';
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, DPR;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.scale(DPR, DPR);
+  buildScene();
 }
-resizeCanvas();
-const ctx = C.getContext('2d');
-ctx.scale(DPR, DPR);
 
-let mx=-1,my=-1,pmx=-1,pmy=-1;
-let windForce=0, frame=0, stillFrames=0;
-const reeds=[];
-const N=85;
+// ── STATE ──────────────────────────────────────────────────────────────────
+let mx = 0.5, my = 0.5; // normalised mouse
+let scrollX = 0, targetScrollX = 0;
+let scrollY = 0, targetScrollY = 0;
+let time = 0;
+let audioCtx = null, soundOn = false;
+let windGain, ambientGain;
 
-// ── STARS ──
-const stars=Array.from({length:120},()=>({
-  x:Math.random(),y:Math.random()*.52,
-  r:.1+Math.random()*.8,
-  a:.06+Math.random()*.38,
-  tw:Math.random()*Math.PI*2,
-  sp:.2+Math.random()*.5
-}));
+// ── CITY GEOMETRY ──────────────────────────────────────────────────────────
+let buildings = [];
+let vines = [];
+let debris = [];
+let windows_ = [];
+let plants = [];
+let cracks = [];
 
-// ── REED ──
-class Reed{
-  constructor(x,z){
-    this.x=x; this.z=z;
-    this.sway=0; this.vel=0;
-    this.phase=Math.random()*Math.PI*2;
-    this.hue=30+Math.random()*18;
-    this.lgt=16+Math.random()*12;
-    this.hasHead=Math.random()>.28;
-    this.init();
-  }
-  init(){
-    const zs=.38+this.z*.62;
-    this.baseY=H*(.69+this.z*.07);
-    this.h=(H*.16+Math.random()*H*.18)*zs;
-    this.thick=(.6+Math.random()*2.8)*zs;
-    this.headH=(5+Math.random()*7)*zs;
-    this.headW=(2.2+Math.random()*2.2)*zs;
-  }
-  update(){
-    const amb=Math.sin(frame*.009+this.phase)*.09+Math.sin(frame*.021+this.phase*1.8)*.04;
-    let cw=0;
-    if(mx>0){
-      const dx=mx-this.x;
-      const inf=Math.max(0,1-Math.abs(dx)/(W*.18));
-      const spd=(mx-pmx)*.003;
-      cw=inf*windForce*.75*Math.sign(spd||1);
-    }
-    const target=amb+cw;
-    this.vel+=(target-this.sway)*.042;
-    this.vel*=.87;
-    this.sway=Math.max(-.48,Math.min(.48,this.sway+this.vel));
-  }
-  draw(){
-    const sw=this.sway*this.h;
-    const cp1x=sw*.2,cp1y=-this.h*.38;
-    const cp2x=sw*.62,cp2y=-this.h*.72;
-    const ex=sw,ey=-this.h;
-    const zs=.38+this.z*.62;
+const WORLD_W = W * 3;
 
-    ctx.save();
-    ctx.translate(this.x,this.baseY);
+function rng(seed) {
+  let s = seed;
+  return function() {
+    s = (s * 1664525 + 1013904223) & 0xFFFFFFFF;
+    return (s >>> 0) / 0xFFFFFFFF;
+  };
+}
 
-    // Base stalk — vary opacity along length (darker base, lighter tip)
-    const grad=ctx.createLinearGradient(0,0,ex,ey);
-    const l=this.lgt;
-    grad.addColorStop(0,`hsla(${this.hue},18%,${l*.7}%,.65)`);
-    grad.addColorStop(.45,`hsla(${this.hue},20%,${l}%,.8)`);
-    grad.addColorStop(1,`hsla(${this.hue},22%,${l+12}%,.7)`);
+function buildScene() {
+  const r = rng(42);
+  buildings = [];
+  vines = [];
+  debris = [];
+  windows_ = [];
+  plants = [];
 
-    ctx.beginPath();ctx.moveTo(0,0);
-    ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,ex,ey);
-    ctx.strokeStyle=grad;
-    ctx.lineWidth=this.thick;ctx.lineCap='round';ctx.stroke();
+  const totalW = W * 4; // wide scrollable world
+  const groundY = H * 0.72;
 
-    // Atmospheric rim — blue-silver from sky, only on closer reeds
-    if(this.z>.45){
-      ctx.beginPath();ctx.moveTo(this.thick*.3,0);
-      ctx.bezierCurveTo(cp1x+this.thick*.35,cp1y,cp2x+this.thick*.3,cp2y,ex+this.thick*.22,ey);
-      ctx.strokeStyle=`rgba(140,165,210,${.05*this.z})`;
-      ctx.lineWidth=this.thick*.28;ctx.stroke();
-    }
+  // ── BUILDINGS ──
+  let x = -W * 0.2;
+  while (x < totalW) {
+    const bw = 60 + r() * 160;
+    const bh = 80 + r() * (H * 0.55);
+    const by = groundY - bh;
+    const damage = r() < 0.25; // 25% of buildings are damaged
+    const col = damage
+      ? `hsl(${20 + r()*20},${5+r()*8}%,${8+r()*10}%)`
+      : `hsl(${200 + r()*30},${3+r()*6}%,${10+r()*14}%)`;
 
-    // Cattail
-    if(this.hasHead){
-      const hx=ex*.84+cp2x*.16;
-      const hy=ey*.84+cp2y*.16;
-      // Tapered ellipse
-      ctx.beginPath();
-      ctx.ellipse(hx,hy-this.headH*.45,this.headW*.38*zs,this.headH*.45,this.sway*.18,0,Math.PI*2);
-      ctx.fillStyle=`hsla(22,25%,14%,.92)`;ctx.fill();
-      // Hair fibers at top
-      for(let i=0;i<4;i++){
-        const fx=hx+(Math.random()-.5)*this.headW*.6;
-        const fy=hy-this.headH*.9-Math.random()*this.headH*.4;
-        ctx.beginPath();ctx.moveTo(fx,hy-this.headH*.9);ctx.lineTo(fx+(Math.random()-.5)*3,fy);
-        ctx.strokeStyle=`rgba(180,170,140,.3)`;ctx.lineWidth=.4;ctx.stroke();
+    buildings.push({ x, y: by, w: bw, h: bh, col, damage,
+      overgrown: r() > 0.3, // most buildings have plant growth
+      crack: r() > 0.5,
+      floors: Math.floor(3 + r() * 15)
+    });
+
+    // Windows for this building
+    if (!damage) {
+      const cols = Math.floor(bw / 18);
+      const rows = Math.floor(bh / 22);
+      for (let wr = 0; wr < rows; wr++) {
+        for (let wc = 0; wc < cols; wc++) {
+          if (r() < 0.7) {
+            windows_.push({
+              x: x + 8 + wc * 18 + r() * 3,
+              y: by + 10 + wr * 22 + r() * 3,
+              w: 10 + r() * 6, h: 14 + r() * 6,
+              broken: r() > 0.6,
+              dark: r() > 0.3
+            });
+          }
+        }
       }
     }
-    ctx.restore();
+
+    // Gap between buildings
+    x += bw + (r() < 0.2 ? 40 + r() * 60 : 2 + r() * 8);
   }
-}
 
-// ── RAIN ──
-const drops=[];
-let raining=false,rainT=0,rainDur=0;
-class Drop{
-  constructor(){this.reset();}
-  reset(){this.x=Math.random()*W*1.15-W*.08;this.y=Math.random()*H*.3;this.l=9+Math.random()*13;this.s=11+Math.random()*7;this.a=.08+Math.random()*.15;}
-  update(){this.x+=this.s*.1;this.y+=this.s;if(this.y>H+20)this.reset();}
-  draw(){ctx.beginPath();ctx.moveTo(this.x,this.y);ctx.lineTo(this.x+this.l*.1,this.y+this.l);ctx.strokeStyle=`rgba(150,175,220,${this.a})`;ctx.lineWidth=.65;ctx.stroke();}
-}
+  // ── VINES DRAPED ON BUILDINGS ──
+  buildings.forEach((b, i) => {
+    if (!b.overgrown) return;
+    const numVines = 2 + Math.floor(rng(i * 7)() * 6);
+    for (let v = 0; v < numVines; v++) {
+      const vr = rng(i * 13 + v);
+      const startX = b.x + vr() * b.w;
+      const startY = b.y + vr() * (b.h * 0.4); // starts somewhere on upper building
+      const length = 40 + vr() * (b.h * 0.7);
+      vines.push({
+        x: startX, y: startY, length,
+        sway: vr() * Math.PI * 2,
+        swayAmp: 4 + vr() * 12,
+        segments: Math.floor(8 + vr() * 16),
+        col: `hsl(${100 + vr()*30},${40+vr()*30}%,${18+vr()*15}%)`
+      });
+    }
+  });
 
-// ── MYCELIUM ──
-const mycelLines=[];
-let mycelT=0;
-function updateMycel(){
-  mycelT++;
-  if(mycelT%300!==0)return;
-  mycelLines.length=0;
-  reeds.forEach((a,i)=>{
-    reeds.slice(i+1).forEach(b=>{
-      const d=Math.abs(a.x-b.x);
-      if(d<W*.05&&Math.abs(a.z-b.z)<.22)
-        mycelLines.push({x1:a.x,y1:a.baseY,x2:b.x,y2:b.baseY,a:(1-d/(W*.05))*.12});
+  // ── GROUND PLANTS ──
+  for (let i = 0; i < 200; i++) {
+    const pr = rng(i * 19 + 3);
+    plants.push({
+      x: pr() * totalW,
+      y: groundY + pr() * (H * 0.05),
+      size: 8 + pr() * 40,
+      type: Math.floor(pr() * 3), // 0=grass, 1=bush, 2=tall weed
+      sway: pr() * Math.PI * 2,
+      col: `hsl(${95 + pr()*40},${35+pr()*30}%,${15+pr()*20}%)`
     });
-  });
-}
-function drawMycel(){
-  if(stillFrames<240)return;
-  const fade=Math.min(1,(stillFrames-240)/180);
-  const t=frame*.0015;
-  mycelLines.forEach(ln=>{
-    const p=.5+.5*Math.sin(t+ln.x1*.006);
-    ctx.beginPath();ctx.moveTo(ln.x1,ln.y1);
-    ctx.quadraticCurveTo((ln.x1+ln.x2)/2,(ln.y1+ln.y2)/2-8,ln.x2,ln.y2);
-    ctx.strokeStyle=`rgba(80,190,120,${ln.a*p*fade})`;ctx.lineWidth=.55;ctx.stroke();
-  });
-}
-
-// ── FIREFLIES — appear when very still ──
-const flies=Array.from({length:18},()=>({
-  x:Math.random()*W,y:H*.28+Math.random()*H*.42,
-  vx:(Math.random()-.5)*.5,vy:(Math.random()-.5)*.35,
-  phase:Math.random()*Math.PI*2,ps:.025+Math.random()*.04,r:1.2+Math.random()*1.3
-}));
-function drawFlies(){
-  if(stillFrames<400)return;
-  const fade=Math.min(1,(stillFrames-400)/300);
-  const t=frame*.001;
-  flies.forEach(f=>{
-    f.vx+=(Math.random()-.5)*.04;f.vy+=(Math.random()-.5)*.03;
-    f.vx*=.98;f.vy*=.98;
-    f.x=(f.x+f.vx+W)%W;f.y=Math.max(H*.2,Math.min(H*.75,f.y+f.vy));
-    const glow=Math.max(0,Math.sin(t*f.ps*80+f.phase));
-    if(glow<.05)return;
-    const al=glow*fade*.75;
-    const rg=ctx.createRadialGradient(f.x,f.y,0,f.x,f.y,f.r*7);
-    rg.addColorStop(0,`rgba(180,255,120,${al})`);rg.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=rg;ctx.beginPath();ctx.arc(f.x,f.y,f.r*7,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle=`rgba(210,255,160,${al})`;ctx.beginPath();ctx.arc(f.x,f.y,f.r,0,Math.PI*2);ctx.fill();
-  });
-}
-
-// ── AUDIO ──
-let actx,wGain,rGain,cGain,mGain,audioOn=false;
-function initAudio(){
-  if(audioOn)return;audioOn=true;
-  try{
-    actx=new(window.AudioContext||window.webkitAudioContext)();
-    mGain=actx.createGain();mGain.gain.value=0;mGain.connect(actx.destination);
-    const rate=actx.sampleRate;
-    function brown(len){const b=actx.createBuffer(1,len,rate);const d=b.getChannelData(0);let l=0;for(let i=0;i<len;i++){const w=Math.random()*2-1;l=(l+.02*w)/1.02;d[i]=l*3.5;}return b;}
-    function white(len){const b=actx.createBuffer(1,len,rate);const d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;return b;}
-    const ws=actx.createBufferSource();ws.buffer=brown(rate*4);ws.loop=true;
-    const wf=actx.createBiquadFilter();wf.type='lowpass';wf.frequency.value=280;
-    wGain=actx.createGain();wGain.gain.value=.05;
-    ws.connect(wf);wf.connect(wGain);wGain.connect(mGain);ws.start();
-    const rs=actx.createBufferSource();rs.buffer=white(rate*3);rs.loop=true;
-    const rf=actx.createBiquadFilter();rf.type='bandpass';rf.frequency.value=650;rf.Q.value=.8;
-    rGain=actx.createGain();rGain.gain.value=0;
-    rs.connect(rf);rf.connect(rGain);rGain.connect(mGain);rs.start();
-    const cs=actx.createBufferSource();cs.buffer=white(rate*3);cs.loop=true;
-    const cf=actx.createBiquadFilter();cf.type='bandpass';cf.frequency.value=5200;cf.Q.value=9;
-    cGain=actx.createGain();cGain.gain.value=0;
-    cs.connect(cf);cf.connect(cGain);cGain.connect(mGain);cs.start();
-    mGain.gain.setTargetAtTime(.7,actx.currentTime,1.5);
-  }catch(e){}
-}
-document.addEventListener('click',initAudio,{once:true});
-document.addEventListener('touchstart',initAudio,{once:true});
-setTimeout(initAudio,500);
-
-// ── RENDER ──
-function render(){
-  frame++;
-  ctx.clearRect(0,0,W,H);
-
-  // Sky — deep blue-indigo, dark
-  const t=frame*.001;
-  const sky=ctx.createLinearGradient(0,0,0,H*.72);
-  sky.addColorStop(0,'hsl(228,35%,5%)');
-  sky.addColorStop(.38,'hsl(225,30%,8%)');
-  sky.addColorStop(.72,'hsl(222,25%,10%)');
-  sky.addColorStop(1,'hsl(220,20%,6%)');
-  ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
-
-  // Stars with gentle twinkle
-  stars.forEach(s=>{
-    const tw=.3+.7*Math.sin(t*s.sp+s.tw);
-    ctx.fillStyle=`rgba(200,210,230,${s.a*tw})`;
-    ctx.beginPath();ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);ctx.fill();
-  });
-
-  // Subtle cool horizon glow
-  const hg=ctx.createRadialGradient(W*.5,H*.7,0,W*.5,H*.7,W*.35);
-  hg.addColorStop(0,'rgba(40,60,120,.06)');hg.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=hg;ctx.fillRect(0,0,W,H);
-
-  // Rain
-  if(raining)drops.forEach(d=>{d.update();d.draw();});
-
-  // Ground — dark with subtle texture
-  const gnd=ctx.createLinearGradient(0,H*.68,0,H);
-  gnd.addColorStop(0,'hsl(222,22%,6%)');
-  gnd.addColorStop(.4,'hsl(220,20%,4%)');
-  gnd.addColorStop(1,'hsl(220,18%,3%)');
-  ctx.fillStyle=gnd;ctx.fillRect(0,H*.68,W,H*.32);
-  // Subtle ground texture — horizontal variation
-  for(let gi=0;gi<8;gi++){
-    const gy=H*(.72+gi*.04);
-    const ga=.015+Math.random()*.02;
-    ctx.fillStyle=`rgba(255,255,255,${ga})`;
-    ctx.fillRect(Math.random()*W*.3,gy,W*(.4+Math.random()*.4),.5);
   }
 
-  // Ground mist — layered atmospheric fog
-  [.03,.06,.1,.15].forEach((a,i)=>{
-    const fg=ctx.createLinearGradient(0,H*(.58+i*.05),0,H*(.78+i*.04));
-    fg.addColorStop(0,'rgba(0,0,0,0)');
-    fg.addColorStop(.6,`rgba(10,15,35,${a*.5})`);
-    fg.addColorStop(1,`rgba(15,22,50,${a})`);
-    ctx.fillStyle=fg;ctx.fillRect(0,H*(.58+i*.05),W,H*.22);
+  // ── STREET DEBRIS ──
+  for (let i = 0; i < 80; i++) {
+    const dr = rng(i * 31 + 7);
+    debris.push({
+      x: dr() * totalW,
+      y: groundY + dr() * (H * 0.04),
+      w: 5 + dr() * 40, h: 3 + dr() * 20,
+      col: `hsl(${20+dr()*30},${3+dr()*8}%,${10+dr()*12}%)`,
+      rot: dr() * Math.PI
+    });
+  }
+}
+
+// ── PARALLAX LAYERS ────────────────────────────────────────────────────────
+const PARALLAX = {
+  sky:      0.0,
+  clouds:   0.05,
+  farBuild: 0.15,
+  midBuild: 0.35,
+  nearBuild:0.7,
+  ground:   1.0,
+  fg:       1.3
+};
+
+// ── DRAWING ────────────────────────────────────────────────────────────────
+function drawSky() {
+  // Dark, overcast post-apocalyptic sky
+  const grad = ctx.createLinearGradient(0, 0, 0, H * 0.75);
+  grad.addColorStop(0,   '#070a07');
+  grad.addColorStop(0.3, '#0c120c');
+  grad.addColorStop(0.65,'#111a10');
+  grad.addColorStop(1,   '#0a1109');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Sickly light through clouds — teal/yellow horizon
+  const horizGrad = ctx.createRadialGradient(W*0.4, H*0.6, 0, W*0.4, H*0.6, W*0.5);
+  horizGrad.addColorStop(0,   'rgba(60,90,50,.12)');
+  horizGrad.addColorStop(0.5, 'rgba(40,70,40,.06)');
+  horizGrad.addColorStop(1,   'transparent');
+  ctx.fillStyle = horizGrad;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawClouds(camX) {
+  // Low heavy clouds, drift slowly
+  const cloudData = [
+    {x:0.1, y:0.08, w:0.35, h:0.12},
+    {x:0.4, y:0.04, w:0.28, h:0.10},
+    {x:0.62,y:0.11, w:0.42, h:0.14},
+    {x:0.85,y:0.06, w:0.30, h:0.09},
+  ];
+  cloudData.forEach(c => {
+    const cx = (c.x * W * 3 - camX * PARALLAX.clouds) % (W * 3);
+    const grad = ctx.createRadialGradient(cx + c.w*W*0.5, c.y*H + c.h*H*0.5, 0, cx + c.w*W*0.5, c.y*H, c.w*W*0.7);
+    grad.addColorStop(0, 'rgba(25,35,25,.75)');
+    grad.addColorStop(0.5,'rgba(20,28,20,.5)');
+    grad.addColorStop(1,  'transparent');
+    ctx.fillStyle = grad;
+    ctx.fillRect(cx, c.y*H - 20, c.w * W, c.h * H + 20);
   });
-  // Horizontal mist wisps
-  for(let mi=0;mi<3;mi++){
-    const my=H*(.68+mi*.05);
-    const mg=ctx.createRadialGradient(W*(0.2+mi*.3),my,0,W*(0.2+mi*.3),my,W*.3);
-    mg.addColorStop(0,`rgba(20,30,60,.06)`);
-    mg.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=mg;ctx.fillRect(0,my-H*.05,W,H*.1);
+}
+
+function drawBuildings(camX, camY) {
+  const groundY = H * 0.72 - camY * 0.1;
+
+  buildings.forEach(b => {
+    // Two layers of buildings with parallax
+    const isFar = buildings.indexOf(b) % 3 === 0;
+    const parallax = isFar ? PARALLAX.farBuild : PARALLAX.midBuild;
+    const bx = b.x - camX * parallax;
+
+    if (bx > W + 200 || bx + b.w < -200) return; // cull
+
+    const by = groundY - b.h;
+
+    // Building body
+    ctx.fillStyle = b.col;
+    ctx.fillRect(bx, by, b.w, b.h + 20);
+
+    // Floor lines (subtle structure)
+    if (b.floors > 0 && !b.damage) {
+      ctx.strokeStyle = 'rgba(0,0,0,.3)';
+      ctx.lineWidth = 0.5;
+      const floorH = b.h / b.floors;
+      for (let f = 1; f < b.floors; f++) {
+        ctx.beginPath();
+        ctx.moveTo(bx, by + f * floorH);
+        ctx.lineTo(bx + b.w, by + f * floorH);
+        ctx.stroke();
+      }
+    }
+
+    // Damage — jagged top
+    if (b.damage) {
+      ctx.fillStyle = '#0a0e0a';
+      const pts = [];
+      let dx = bx;
+      while (dx < bx + b.w) {
+        pts.push({x: dx, y: by + (Math.random() < 0.4 ? -(5 + Math.random()*30) : 0)});
+        dx += 8 + Math.random() * 15;
+      }
+      ctx.beginPath();
+      ctx.moveTo(bx, by - 40);
+      pts.forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.lineTo(bx + b.w, by - 40);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Vine tendrils on building face
+    if (b.overgrown) {
+      for (let v = 0; v < 3; v++) {
+        const vx = bx + b.w * (0.1 + v * 0.35);
+        const vy = by + b.h * 0.15;
+        const vl = b.h * (0.3 + Math.sin(time * 0.3 + v) * 0.05);
+        ctx.strokeStyle = `hsla(${110 + v*15},40%,${15+v*5}%,.6)`;
+        ctx.lineWidth = 1 + v * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(vx, vy);
+        for (let s = 0; s < 8; s++) {
+          const sy = vy + (s/8) * vl;
+          const sx = vx + Math.sin(time * 0.4 + s * 0.8 + v * 2) * (4 + s * 1.5);
+          ctx.lineTo(sx, sy);
+        }
+        ctx.stroke();
+
+        // Leaves
+        for (let l = 2; l < 7; l++) {
+          const lx = vx + Math.sin(time * 0.4 + l * 0.8 + v * 2) * (4 + l * 1.5);
+          const ly = vy + (l/8) * vl;
+          drawLeaf(lx, ly, 4 + l * 0.5, time + v + l, 110 + v*15);
+        }
+      }
+    }
+  });
+}
+
+function drawLeaf(x, y, size, phase, hue) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(Math.sin(time * 0.5 + phase) * 0.15 + phase * 0.3);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, size, size * 0.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = `hsla(${hue},${40+Math.sin(phase)*10}%,${18+Math.sin(phase*0.7)*5}%,.7)`;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawWindows(camX) {
+  const groundY = H * 0.72;
+  windows_.forEach(win => {
+    const wx = win.x - camX * PARALLAX.midBuild;
+    if (wx > W + 50 || wx + win.w < -50) return;
+
+    if (win.broken) {
+      // Broken window — jagged dark
+      ctx.fillStyle = 'rgba(0,0,0,.8)';
+      ctx.fillRect(wx, win.y, win.w, win.h);
+      ctx.strokeStyle = 'rgba(80,100,80,.3)';
+      ctx.lineWidth = 0.5;
+      // Crack lines
+      ctx.beginPath();
+      ctx.moveTo(wx + win.w * 0.3, win.y);
+      ctx.lineTo(wx + win.w * 0.7, win.y + win.h);
+      ctx.moveTo(wx + win.w * 0.7, win.y);
+      ctx.lineTo(wx + win.w * 0.2, win.y + win.h);
+      ctx.stroke();
+    } else if (win.dark) {
+      ctx.fillStyle = 'rgba(0,2,1,.85)';
+      ctx.fillRect(wx, win.y, win.w, win.h);
+    } else {
+      // Faintly reflective — teal-grey tint
+      ctx.fillStyle = 'rgba(30,45,40,.6)';
+      ctx.fillRect(wx, win.y, win.w, win.h);
+      // Light reflection
+      const rg = ctx.createLinearGradient(wx, win.y, wx + win.w, win.y + win.h);
+      rg.addColorStop(0, 'rgba(60,90,70,.15)');
+      rg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = rg;
+      ctx.fillRect(wx, win.y, win.w, win.h);
+    }
+  });
+}
+
+function drawGround(camX) {
+  const groundY = H * 0.72;
+
+  // Road surface
+  const roadGrad = ctx.createLinearGradient(0, groundY, 0, H);
+  roadGrad.addColorStop(0, '#0d120d');
+  roadGrad.addColorStop(0.3, '#0b0f0a');
+  roadGrad.addColorStop(1, '#080c08');
+  ctx.fillStyle = roadGrad;
+  ctx.fillRect(0, groundY, W, H - groundY);
+
+  // Pavement cracks
+  ctx.strokeStyle = 'rgba(30,45,25,.4)';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < 12; i++) {
+    const cx = (i * 150 - camX * 0.3) % (W + 100) - 50;
+    ctx.beginPath();
+    ctx.moveTo(cx, groundY + 5);
+    ctx.lineTo(cx + 30 + Math.sin(i * 3.7) * 20, groundY + 40 + Math.sin(i * 2.1) * 20);
+    ctx.lineTo(cx + 10 + Math.cos(i * 4.3) * 25, groundY + 80);
+    ctx.stroke();
   }
 
-  // Mycelium
-  drawMycel();
+  // Road markings — faded, overgrown
+  ctx.strokeStyle = 'rgba(45,55,40,.15)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([40, 30]);
+  ctx.beginPath();
+  ctx.moveTo(-camX * 0.2 % W - W, groundY + (H - groundY) * 0.4);
+  ctx.lineTo(W * 2, groundY + (H - groundY) * 0.4);
+  ctx.stroke();
+  ctx.setLineDash([]);
 
-  // Reeds — sorted far to close
-  reeds.forEach(r=>{r.update();r.draw();});
+  // Debris on ground
+  debris.forEach(d => {
+    const dx = (d.x - camX * PARALLAX.ground + W * 2) % (W * 4) - W * 0.5;
+    if (dx > W + 60 || dx + d.w < -60) return;
+    ctx.save();
+    ctx.translate(dx + d.w/2, d.y + d.h/2);
+    ctx.rotate(d.rot);
+    ctx.fillStyle = d.col;
+    ctx.fillRect(-d.w/2, -d.h/2, d.w, d.h);
+    ctx.restore();
+  });
+}
 
-  // Fireflies
-  drawFlies();
+function drawGroundPlants(camX) {
+  const groundY = H * 0.72;
 
-  // Cursor glow on canvas
-  if(mx>0){
-    const cg=ctx.createRadialGradient(mx,my,0,mx,my,60);
-    cg.addColorStop(0,'rgba(180,200,255,.035)');cg.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=cg;ctx.fillRect(0,0,W,H);
+  plants.forEach(p => {
+    const px = (p.x - camX * PARALLAX.ground + W * 3) % (W * 4) - W * 0.3;
+    if (px > W + 80 || px < -80) return;
+    const sway = Math.sin(time * 0.6 + p.sway) * 3;
+
+    if (p.type === 0) {
+      // Tall grass blades
+      for (let g = 0; g < 5; g++) {
+        ctx.strokeStyle = p.col;
+        ctx.lineWidth = 0.8 + g * 0.2;
+        ctx.beginPath();
+        ctx.moveTo(px + g * 5, p.y);
+        ctx.quadraticCurveTo(
+          px + g * 5 + sway + g * 2, p.y - p.size * 0.6,
+          px + g * 5 + sway * 1.5, p.y - p.size
+        );
+        ctx.stroke();
+      }
+    } else if (p.type === 1) {
+      // Bush
+      for (let b = 0; b < 6; b++) {
+        const ba = (b / 6) * Math.PI * 2;
+        const br = p.size * 0.3;
+        ctx.beginPath();
+        ctx.arc(px + Math.cos(ba) * br + sway * 0.3, p.y - p.size * 0.4 + Math.sin(ba) * br * 0.5, p.size * 0.25, 0, Math.PI * 2);
+        ctx.fillStyle = p.col;
+        ctx.fill();
+      }
+    } else {
+      // Tall weed
+      ctx.strokeStyle = p.col;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px, p.y);
+      ctx.lineTo(px + sway, p.y - p.size);
+      ctx.stroke();
+      // Seed head
+      ctx.beginPath();
+      ctx.arc(px + sway, p.y - p.size, 3, 0, Math.PI * 2);
+      ctx.fillStyle = p.col;
+      ctx.fill();
+    }
+  });
+}
+
+function drawFgVines(camX) {
+  // Foreground vines — large, close up
+  for (let v = 0; v < 6; v++) {
+    const vx = ((v * 220 - camX * PARALLAX.fg) % (W * 5) + W * 5) % (W * 5) - 100;
+    if (vx > W + 200 || vx < -200) continue;
+    const vl = H * 0.4 + v * 30;
+    const startY = -20;
+
+    ctx.strokeStyle = `hsla(${105+v*12},${35+v*5}%,${14+v*3}%,.55)`;
+    ctx.lineWidth = 2 + v * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(vx, startY);
+    for (let s = 0; s < 12; s++) {
+      const sy = startY + (s/12) * vl;
+      const sx = vx + Math.sin(time * 0.35 + s * 0.7 + v * 1.5) * (8 + s * 2);
+      ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+
+    // Leaves on foreground vines
+    for (let l = 1; l < 10; l++) {
+      const ly = startY + (l/12) * vl;
+      const lx = vx + Math.sin(time * 0.35 + l * 0.7 + v * 1.5) * (8 + l * 2);
+      drawLeaf(lx, ly, 6 + l * 0.8, time + v * 2 + l, 105 + v * 12);
+    }
   }
+}
 
-  // Vignette — strong corners
-  const vig=ctx.createRadialGradient(W/2,H/2,H*.22,W/2,H/2,H*.9);
-  vig.addColorStop(0,'rgba(0,0,0,0)');vig.addColorStop(1,'rgba(0,0,0,.68)');
-  ctx.fillStyle=vig;ctx.fillRect(0,0,W,H);
+function drawAtmosphere() {
+  // Ground fog / haze
+  const fogGrad = ctx.createLinearGradient(0, H * 0.65, 0, H * 0.85);
+  fogGrad.addColorStop(0, 'transparent');
+  fogGrad.addColorStop(0.4, 'rgba(15,25,15,.18)');
+  fogGrad.addColorStop(1, 'rgba(10,16,10,.35)');
+  ctx.fillStyle = fogGrad;
+  ctx.fillRect(0, H * 0.65, W, H * 0.35);
 
-  windForce*=.96;
-  const spd=Math.abs(mx-pmx)+Math.abs(my-pmy);
-  stillFrames=spd<1&&mx>0?stillFrames+1:Math.max(0,stillFrames-2);
-  pmx=mx;pmy=my;
+  // Vignette
+  const vig = ctx.createRadialGradient(W/2, H/2, H*0.2, W/2, H/2, W*0.8);
+  vig.addColorStop(0, 'transparent');
+  vig.addColorStop(1, 'rgba(4,7,4,.65)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
 
-  rainT++;
-  if(!raining&&rainT>600+Math.random()*2200){raining=true;rainDur=120+Math.random()*280;rainT=0;while(drops.length<65)drops.push(new Drop());}
-  if(raining&&rainT>rainDur){raining=false;rainT=0;drops.length=0;}
-  updateMycel();
-
-  if(audioOn&&actx){
-    const at=actx.currentTime;
-    wGain&&wGain.gain.setTargetAtTime(.04+windForce*.1,at,.3);
-    rGain&&rGain.gain.setTargetAtTime(raining?.14:0,at,.7);
-    cGain&&cGain.gain.setTargetAtTime(stillFrames>300?.025:0,at,2);
+  // Rain effect (very subtle)
+  ctx.strokeStyle = 'rgba(80,110,85,.04)';
+  ctx.lineWidth = 0.5;
+  for (let r = 0; r < 30; r++) {
+    const rx = (r * 67 + time * 40) % W;
+    const ry = (r * 113 + time * 80) % H;
+    ctx.beginPath();
+    ctx.moveTo(rx, ry);
+    ctx.lineTo(rx - 1, ry + 12);
+    ctx.stroke();
   }
+}
+
+// ── AUDIO ──────────────────────────────────────────────────────────────────
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // Wind — filtered noise
+  const bufSize = audioCtx.sampleRate * 2;
+  const buffer = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+
+  const windSrc = audioCtx.createBufferSource();
+  windSrc.buffer = buffer;
+  windSrc.loop = true;
+
+  const windFilter = audioCtx.createBiquadFilter();
+  windFilter.type = 'bandpass';
+  windFilter.frequency.value = 200;
+  windFilter.Q.value = 0.5;
+
+  windGain = audioCtx.createGain();
+  windGain.gain.value = 0.04;
+
+  windSrc.connect(windFilter);
+  windFilter.connect(windGain);
+  windGain.connect(audioCtx.destination);
+  windSrc.start();
+
+  // Distant ambient — very low drone
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.value = 55;
+
+  ambientGain = audioCtx.createGain();
+  ambientGain.gain.value = 0;
+
+  const lfo = audioCtx.createOscillator();
+  lfo.frequency.value = 0.08;
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 0.015;
+  lfo.connect(lfoGain);
+  lfoGain.connect(ambientGain.gain);
+
+  osc.connect(ambientGain);
+  ambientGain.connect(audioCtx.destination);
+  osc.start(); lfo.start();
+
+  if (soundOn) {
+    windGain.gain.value = 0.04;
+    ambientGain.gain.value = 0.025;
+  }
+}
+
+document.getElementById('soundBtn').addEventListener('click', function() {
+  initAudio();
+  soundOn = !soundOn;
+  this.textContent = soundOn ? 'Sound on' : 'Sound off';
+  if (audioCtx) {
+    windGain && (windGain.gain.value = soundOn ? 0.04 : 0);
+    ambientGain && (ambientGain.gain.value = soundOn ? 0.025 : 0);
+  }
+});
+
+// ── INPUT ──────────────────────────────────────────────────────────────────
+window.addEventListener('mousemove', function(e) {
+  mx = e.clientX / W;
+  my = e.clientY / H;
+  targetScrollX = (mx - 0.5) * W * 2.5;
+  targetScrollY = (my - 0.5) * H * 0.15;
+});
+
+window.addEventListener('wheel', function(e) {
+  targetScrollX += e.deltaY * 1.2;
+  targetScrollX = Math.max(-W * 0.1, Math.min(W * 2.2, targetScrollX));
+});
+
+// Touch
+let touchStartX = 0;
+window.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+window.addEventListener('touchmove', function(e) {
+  const dx = touchStartX - e.touches[0].clientX;
+  targetScrollX += dx * 1.5;
+  targetScrollX = Math.max(-W * 0.1, Math.min(W * 2.2, targetScrollX));
+  touchStartX = e.touches[0].clientX;
+  e.preventDefault();
+}, { passive: false });
+
+// ── RENDER LOOP ────────────────────────────────────────────────────────────
+function render() {
+  time += 0.016;
+
+  // Smooth camera
+  scrollX += (targetScrollX - scrollX) * 0.06;
+  scrollY += (targetScrollY - scrollY) * 0.06;
+
+  ctx.clearRect(0, 0, W, H);
+
+  drawSky();
+  drawClouds(scrollX);
+  drawBuildings(scrollX, scrollY);
+  drawWindows(scrollX);
+  drawGround(scrollX);
+  drawGroundPlants(scrollX);
+  drawFgVines(scrollX);
+  drawAtmosphere();
+
+  // Update coords UI
+  const lat = (22.3193 + scrollX * 0.00003).toFixed(4);
+  const lng = (114.1694 + scrollX * 0.00004).toFixed(4);
+  document.getElementById('coords').innerHTML = lat + '° N<br>' + lng + '° E';
 
   requestAnimationFrame(render);
 }
 
-// ── INIT ──
-function init(){
-  reeds.length=0;
-  for(let i=0;i<N*.35;i++) reeds.push(new Reed(Math.random()*W,Math.random()*.3));
-  for(let i=0;i<N*.4;i++) reeds.push(new Reed(Math.random()*W,.3+Math.random()*.35));
-  for(let i=0;i<N*.25;i++) reeds.push(new Reed(Math.random()*W,.65+Math.random()*.35));
-  reeds.sort((a,b)=>a.z-b.z);
-  render();
+// ── INIT ───────────────────────────────────────────────────────────────────
+function init() {
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Fake load progress
+  const fill = document.getElementById('ldFill');
+  const status = document.getElementById('ldStatus');
+  const stages = ['Rendering city','Placing vegetation','Ageing surfaces','Raising the silence'];
+  let prog = 0;
+  const loader = setInterval(function() {
+    prog += 3 + Math.random() * 8;
+    if (prog >= 100) { prog = 100; clearInterval(loader); }
+    fill.style.width = prog + '%';
+    status.textContent = stages[Math.floor(prog / 28)];
+    if (prog === 100) {
+      setTimeout(function() {
+        const ld = document.getElementById('loading');
+        ld.classList.add('out');
+        setTimeout(() => ld.style.display = 'none', 1600);
+        render();
+      }, 600);
+    }
+  }, 60);
 }
 
-window.addEventListener('resize',()=>{resizeCanvas();ctx.scale(DPR,DPR);reeds.forEach(r=>r.init());});
-document.addEventListener('mousemove',e=>{const spd=Math.hypot(e.clientX-mx,e.clientY-my);windForce=Math.min(1,windForce+spd*.003);mx=e.clientX;my=e.clientY;});
-document.addEventListener('touchmove',e=>{const t=e.touches[0];windForce=Math.min(1,windForce+Math.hypot(t.clientX-mx,t.clientY-my)*.003);mx=t.clientX;my=t.clientY;e.preventDefault();},{passive:false});
 init();
 </script>
 </body>
